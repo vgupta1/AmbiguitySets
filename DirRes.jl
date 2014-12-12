@@ -1,75 +1,172 @@
 module Dir
 
-using Distributions, Roots, Optim, JuMP
+using Distributions, Roots, Optim
+
+include("bernstein.jl")
+include("asymptotics.jl")
+
+#Problematic Test Cases
+#vbars [0.24501246861638076,-0.16745207467440992,-0.11692969664839702]
+#alphas = 10 * [3, 3, 3]
+
+#Even better.. Neither pos_congtour nor neg works
+#vbars [-0.3129438949072508,0.6320289286393632,0.6443383495423485,-0.8299381500899872,-0.3285773443404617]
+#balphas = 20 * ones(5)
 
 #Approximate the residue of fun at z0
-function numRes(fun, z0; r = .01)
-	f(t) = r * exp(2im * pi * t) * fun(z0 + r * exp(2im * pi * t) )
-	quadgk(f, 0., 1.)
-end
-
 #fun takes a complex argument
-function numRes(fun, z0, r, m; old=false)
-	if old
-		return numRes(fun, z0, r=r)
-	end
+function numRes(fun, z0, r, m, useAdaptiveInt = false)
 	f(t) = r * exp(2im * pi * t) * fun(z0 + r * exp(2im * pi * t) )
-	sum(map(f, linspace(0, 1, m+1)[1:end-1]))/m
-end
-
-#inserts zero proxies and retains ordering
-function sort_poles(vbars_, alphas_)
-	ps    = [-1./vbars_, 0.0]
-	alphas    = [alphas_, 1]
-	indxs = sortperm(ps)
-	[vbars_, 1][indxs], ps[indxs], alphas[indxs]
-end
-
-
-#approximates a good raduii for numRes and conditioning constants
-#assumes that vbars, ps, alphas are ordered now and proxied
-function optRs(vbars, ps, alphas)
-	rs    = zeros(length(ps))  			#radius for integration
-	lams    = zeros(length(ps))			#conditioning of the integrand
-
-	zstar_l = Inf
-	for ix = 1:length(ps)
-		#compute the right "midpoint"
-		if ix == length(ps)
-			zstar_r = Inf
-		else
-			zstar_r = ps[ix+1] - ps[ix]
-		end
-
-		#maximum size of the annulus
-		if zstar_l < zstar_r
-			rmax, alpha_max = zstar_l, alphas[ix-1]
-			vmax = vbars[ix-1]
-		else
-			rmax, alpha_max = zstar_r, alphas[ix + 1]
-			vmax = vbars[ix + 1]
-		end
-
-		#locally optimum r
-		rs[ix] = alphas[ix] * rmax / (alphas[ix] + alpha_max)
-		lams[ix] = abs((vbars[ix] * rs[ix])^(2*alphas[ix] - 1))
-
-		zstar_l = zstar_r
+	if useAdaptiveInt
+		quadgk(f, 0., 1.)[1]
+	else
+		t_grid = map(BigFloat, linspace(0, 1, m+1)[1:end-1] )
+		t = map(f, linspace(0, 1, m+1)[1:end-1])
+		sum(t)/m
 	end
-	rs, lams
 end
 
 #the relevant integrand
 #vbar = v - te
-fint(z, vbars, alphas) = 1/ z / prod((1 + z * vbars) .^ alphas)
+fint(z, vbars, alphas) = prod((1 + z*vbars).^-alphas)/z
 
-#defunct....
-function eq6(vbars, alphas)
-	warn("Deprecated")
-	f(z) = fint(z, vbars, alphas)
-	I1, E1 = quadgk(f, -10im, -.01im)
-	I2, E2 = quadgk(f, .01im, 10im)
-	.5 + 1/2pi * (I1 + I2) / 1im
+#prob_fun(vs, alphas) => Prob( X(vs, alphas) > 0 )
+#VG Revisit this to add a timing function
+function Var(alphas, vs, eps_, prob_fun; 
+				tmax=bernVar(vs, alphas, eps_), 
+				tmin=dot(vs, alphas)/sum(alphas), 
+				tol=1e-6)
+	fzero(t->prob_fun(vs -t, alphas)-eps_, [tmin, tmax], tol=tol)
+end
+
+##############
+function sort_poles(vbars, alphas)
+	ps        = -1./vbars
+	indxs     = sortperm(ps)
+	vbars[indxs], ps[indxs], alphas[indxs]
+end
+
+#finds the optimal positive contour
+function calc_shift(vbars_, alphas_)
+	ps = -1./vbars_
+	alphas =alphas_[ps .> 0]
+	ps = ps[ps .> 0]
+	ix = indmin(ps)
+	ps[ix]/(1 + alphas[ix])
+end
+
+#finds the index of the closest pole to ps[ix].  Returns 0 if it's the origin
+function closest_pole(ps, ix)
+	dist = abs(ps[ix]); min_indx = 0
+	#check the ordinary poles
+	for jx = 1:length(ps)
+		if ix == jx
+			continue
+		elseif abs(ps[ix] - ps[jx]) <= dist
+			dist = abs(ps[ix] - ps[jx])
+			min_indx = jx
+		end
+	end
+	return dist, min_indx
+end
+
+#approximates a good raduii for numRes and conditioning constants
+function optRs_NumRes(vbars, ps, alphas)
+	rs      = zeros(length(ps))  			#radius for integration
+	lams    = zeros(length(ps))			#conditioning of the integrand
+
+	#This is the inefficient way....  O(n^2) operation instead of O(n)
+	const n = length(ps)
+	for ix = 1:n
+		rmax, jx = closest_pole(ps, ix)
+		if jx > 0 
+			rs[ix] = alphas[ix] * rmax / (alphas[ix] + alphas[jx])
+		else
+			rs[ix] = alphas[ix] * rmax/ (alphas[ix] + 1)
+		end
+		lams[ix] = abs((vbars[ix] * rs[ix])^(2*alphas[ix] - 1))
+	end	
+	rs, lams
+end
+
+#evaluates the critical integral via numeric residues
+function integral_residue(vbars_, alphas_; usePosContour=true, m=100, rs =nothing, useAdaptiveInt=false)
+	vbars, ps, alphas = sort_poles(vbars_, alphas_)
+	
+	if rs == nothing
+		rs, lams = optRs_NumRes(vbars, ps, alphas)
+	end
+
+	residues = BigFloat[]
+	for (p, v, alpha, r) in zip(ps, vbars, alphas, rs)
+		if (usePosContour && p > 0) || (!usePosContour && p < 0)
+			push!(residues, real(numRes(z-> fint(z, vbars, alphas), p, r, m, useAdaptiveInt)))
+		end
+	end
+	println("Residues:\n", residues)
+	usePosContour ? -sum_kbn(residues) : 1 + sum_kbn(residues)
+end
+
+
+#compute the sum S_m from notes... an approximation to the residue at -1/v_k
+function numResFourier(vbars, ps, alphas, k, r, m=100)
+	const n = length(ps)
+	indx_not_k = [1:n .!= k]
+	function g(z, vbars, alphas, k) 
+		terms = (1 + z*vbars).^(-alphas)
+		prod(terms[indx_not_k]) / z
+	end
+
+	t_grid = map(BigFloat, linspace(0, 1, m+1)[1:end-1])
+	g_out = map(t-> g(ps[k] + r * exp(2pi * 1im * t), vbars, alphas, k) * exp(-2pi * 1im * (alphas[k] - 1) * t), 
+				t_grid)
+	unscaled_int = sum_kbn(real(g_out))/m
+	coef = r^(1-alphas[k]) * vbars[k]^(-alphas[k])
+	unscaled_int * coef
+end
+
+
+function integral_fourier(vbars_, alphas_; m=100, usePosContour=true, rs=nothing)
+	vbars, ps, alphas=sort_poles(vbars_, alphas_)
+	if rs == nothing
+		rs, lams = optRs_NumRes(vbars, ps, alphas)
+	end
+	residues = BigFloat[]
+	for k = 1:length(ps)
+		if (usePosContour && ps[k] > 0) || (!usePosContour && ps[k] < 0)
+			push!(residues, real(numResFourier(vbars, ps, alphas, k, rs[k], m)))
+		end
+	end
+	usePosContour ? -sum_kbn(residues) : 1 + sum_kbn(residues)
+end
+
+function prob_gauss_approx(vbars, alphas)
+	const mu = dot(vbars, alphas)
+	const sig = sqrt(dot(alphas, vbars.^2))
+	cdf(Normal(), -mu/sig)
+end
+
+
+function probNeg_direct(vbars, alphas)
+	#handle some degnerate cases gracefully
+	if minimum(vbars) > 0
+		return 0.
+	elseif maximum(vbars) <= 0
+		return 1.
+	end
+
+	# const a = calc_shift(vbars, alphas)
+	# coef = prod((1 + a * vbars) .^(-alphas))/pi
+	# vhat = vbars ./ (1 + a*vbars)
+	# f(s) = coef * prod((1+ s*1im*vhat).^(-alphas))/(a + s*1im)
+	# real(quadgk(f, 0, Inf)[1])
+
+	const a = calc_shift(vbars, alphas)
+	# coef = prod((1 + a * vbars) .^(-alphas))/pi
+	# vhat = vbars ./ (1 + a*vbars)
+	# f(s) = coef * prod((1+ s*1im*vhat).^(-alphas))/(a + s*1im)
+	real(quadgk(s->fint(a + s * 1im, vbars, alphas)/pi, 0, Inf)[1])
+
 end
 
 function probXNeg(vbars_, alphas_; method = :PosContour, m=100)
@@ -116,20 +213,6 @@ function probXNeg(vbars_, alphas_; method = :PosContour, m=100)
 	end
 end
 
-function Var(alphas, vs, eps_; method=:PosContour)
-	exp_val = dot(vs, alphas ./sum(alphas))
-	tmax = bernVar(vs, alphas, eps_)
-	#VG Wrap the function to do some tracing
-	ix = 0
-	function f(t)
-		const val = @time probXNeg(vs - t, alphas, method=method)
-		println("$ix \t $t \t $val")
-		ix = ix + 1
-		real(val) -1. + eps_
-	end
-	fzero(f, exp_val, tmax)
-end
-
 #evaluates Dir tail Prob for 3dimensions only
 function Prob3d(alphas, vs, t)
 	@assert length(alphas) == 3 "Only defined for 3 dimensions"
@@ -156,108 +239,10 @@ function Prob3d(alphas, vs, t)
 	if vs[2] > vs[3]
 	 	I = 1 - I
 	end
-	 I, E
+	 I
 end
 
-function Var3d(alphas, vs, eps_)
-	fzero(t->Prob3d(alphas, vs, t)[1] -eps_, -norm(vs, Inf), norm(vs, Inf))
-end
 
-function convexTest(v1, v2; eps_=.1, alphas=[2 3 10])
-	for lam = linspace(0, 1, 20)
-		v = lam * v1 + (1-lam)*v2
-		println("$lam \t $(Var3d(alphas, v, eps_))")
-	end
-end
-
-testProbs(vbars, alphas) = 
-	(Prob3d(alphas, vbars, 0)[1], real(1-probXNeg(vbars, alphas)[1]), 
-								real(1-probXNeg(vbars, alphas, method=:NegContour)[1]), 
-								1-probXNeg(vbars, alphas, method=:Shift)[1] )
-
-#Seems to be a numerical stability problem for some values of vbars alphas
-# vbars -0.925296  -0.264872  -0.905954
-# alphas 3.0  4.0  5.0
-
-#also the negative computation seems to be off by 1 (too large) sometimes, and sometimes weird
-#This example, it is 1 too small.
-# vbars = -0.669911 -0.59414 0.930822
-# alphas = 4 5 7
-
-
-#why not integrate the function directly?  The singularity only seems to affect
-#the imaginary part... And the function (seems) odd.... Maybe fold it and evaluate 
-# as a real integral?
-
-# You are Free to scale vbar.... does this help?
-
-
-#########
-# Using the benrstein type stuff
-##########
-mgf_p(vbars, alphas, lam, eps_) = lam * log(1/eps_) - lam * dot(alphas,  log(1-vbars ./ lam))
-deriv(vbars, alphas, lam, eps_) = log(1/eps_) + dot(alphas, vbars./(vbars - lam)) - dot(alphas, log(1- vbars / lam))
-lammin(vbars; TOL=1e-8) = max(maximum(vbars), 0) + 1e-8
-
-function mgf_p(vbars, alphas, eps_)
-	lamstar = fzero(l->deriv(vbars, alphas, l, eps_), lammin(vbars),  1e2)
-	lammin(vbars), lamstar, mgf_p(vbars, alphas, lamstar, eps_)
-end
-
-function bernVar(vs, alphas, eps_)
-	fzero(t-> mgf_p(vs-t, alphas, eps_)[3], -norm(vs, Inf), norm(vs, Inf))
-end
-
-#computes the best chernoff style bound on P(vbars^T p >=0)
-function chernoff(vbars, alphas)
-	#minimize the log for kicks...
-	f(lam) = dot(-alphas, log(1 - lam * vbars) )
-	if maximum(vbars) < 0
-		l_ = 1e2
-	else
-		l_ = minimum([ 1/ abs(vi) for vi in vbars[vbars .> 0]])
-	end
-	res = optimize(f, 1e-10, l_)
-	return exp(res.f_minimum)
-end
-
-function mgf_d(vbars, alphas, lam, eps_)
-	m = Model()
-	@defVar(m, ys[1:d] >= 0)
-	@defVar(m, s)
-
-	@addNLConstraint(m, 
-		sum{ (ys[i] - alphas[i])+ alphas[i]*log(alphas[i]/ys[i]), i=1:d}
-			 <= log(1/eps_) + s )
-	@setObjective(m, Max, sum{vbars[i]*ys[i], i=1:d} - lam*s)
-
-	solve(m)
-	getObjectiveValue(m), getValue(ys), getValue(s)
-end
-
-# The super cheap 2 moment VaR bound
-function secondMomentVar(vs, alphas, eps_)
-	const kappa = sqrt(1/eps_ - 1)
-	const phat = alphas/sum(alphas)
-	const d = length(alphas);  @assert d == length(vs)
-	const N = sum(alphas)
-	sigma = sigStar(phat) / N
-	dot(vs, phat) + kappa * sqrt( vs' * sigma * vs )[1]
-end
-
-#Computes the Sigma Star limit for Dirichlet
-function sigStar(pstar)
-	const d = length(pstar)
-	sigma = zeros(d, d)
-	for i = 1:d
-		sigma[i, i] = pstar[i]*(1-pstar[i])
-		for j = i+1:d
-			sigma[i, j] = -pstar[i] * pstar[j]
-			sigma[j, i] = sigma[i, j]
-		end
-	end
-	sigma
-end
 
 end #ends module
 
