@@ -1,6 +1,4 @@
 
-
-
 #Computes the Sigma Star limit for Dirichlet
 function sigStar(pstar)
 	const d = length(pstar)
