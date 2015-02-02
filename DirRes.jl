@@ -2,6 +2,8 @@ module Dir
 
 using Distributions, Roots
 
+include("asymptotics.jl")
+include("secMom.jl")
 include("bernstein.jl")
 
 #the relevant integrand
@@ -11,9 +13,10 @@ fint(z, vbars, alphas) = prod((1 + z*vbars).^-alphas)/z
 #prob_fun(vbars, alphas) => Prob( X(vbars, alphas) > 0 )
 #VG Revisit this to add a timing function
 function VaR(vs, alphas, eps_, prob_fun; 
-				tmax=bernVar(vs, alphas, eps_), 
-				tmin=dot(vs, alphas)/sum(alphas), 
-				tol=1e-6)
+				tol=1e-6, 
+				tmax=maximum(vs) - tol, 
+				tmin=minimum(vs) + tol, 
+)
 	fzero(t->prob_fun(vs -t, alphas)-1 +eps_, tmin, tmax)
 end
 
@@ -45,36 +48,36 @@ function prob_direct(vbars, alphas)
 	real(quadgk(s->fint(a + s * 1im, vbars, alphas)/pi, 0, Inf)[1])
 end
 
-# #evaluates Dir tail Prob for 3dimensions only
-# function Prob3d(vbars, alphas)
-# 	@assert length(alphas) == 3 "Only defined for 3 dimensions"
-# 	#handle some degnerate cases gracefully
-# 	if minimum(vbars) > 0
-# 		return 0.
-# 	elseif maximum(vbars) <= 0
-# 		return 1.
-# 	end
+function kl_ratio(vs, alphas, eps_, N)
+	phat, alpha0 = calc_phat(alphas)  #Remember, N and alpha0 may be different
+    Gamma = log(1/eps_) / N
+    bval = bernVar(vs, phat, Gamma)[1] - dot(phat, vs)
+    val = VaR(vs, alphas, eps_, prob_direct) - dot(phat, vs)    
+    bval/val
+end
 
-# 	##VG a Cludge
-# 	if abs(vbars[2] - vbars[3]) < 1e-10
-# 		vbars[2] = vbars[2] + 1e-8
-# 	end
+function kl_ratio_bt(vs, alphas, eps_, d, N)
+	phat, alpha0 = calc_phat(alphas)  #Remember, N and alpha0 may be different
+    Gamma = quantile(Chisq(d-1), 1-eps_)/2N
+    bval = bernVar(vs, phat, Gamma)[1] - dot(phat, vs)
+    val = VaR(vs, alphas, eps_, prob_direct) - dot(phat, vs)    
+    bval/val
+end
 
-# 	beta1 = Beta(alphas[1], alphas[2] + alphas[3])
-# 	beta2 = Beta(alphas[2], alphas[3])
-# 	#the integrand
-# 	function f(p1)
-# 		val = (t - vbars[1]*p1)/(1-p1)/(vbars[2]-vbars[3]) - vbars[3]/(vbars[2]-vbars[3])
-# 	 	cdf(beta2, val) * pdf(beta1, p1)
-# 	end
+function mom_ratio(vs, alphas, eps_)
+	phat, alpha0 = calc_phat(alphas)
+    sm_val = secondMomentVar(vs, alphas, eps_) - dot(phat, vs)
+    val = VaR(vs, alphas, eps_, prob_direct) - dot(phat, vs)    
+    sm_val/val
+end
 
-# 	I, E = Base.quadgk(f, 1e-10, 1-1e-10)
-# 	if vbars[2] > vbars[3]
-# 	 	I = 1 - I
-# 	end
-# 	 I
-# end
-
+function mom_ratio_bt(vs, alphas, eps_, d, N)
+	phat, alpha0 = calc_phat(alphas)
+	sig = sqrt(vs'*sigma(alphas)*vs * alpha0/N )[1] #corrects for def
+	sm_val = sqrt(quantile(Chisq(d-1), 1-eps_)) * sig 
+	val = VaR(vs, alphas, eps_, prob_direct) - dot(phat, vs)    
+	sm_val / val
+end
 
 end #ends module
 
