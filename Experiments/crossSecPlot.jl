@@ -3,6 +3,13 @@
 using JuMP, Roots
 include("../DirRes.jl")
 
+####
+#Calls used to generate the plots
+#crossSec_plot("pstar50.csv", 50, Dir.VaR, "pstar")
+#crossSec_plot("Results/secMom50.csv", 50, Dir.chiSqVar, "ChiSq")
+#crossSec_plot("Results/bernVar50.csv", 50, Dir.KLVar, "ChiSq")
+
+
 function crossSec_dir(dir, d, eps_, alphas, varfun)
 	phat = alphas/sum(alphas)
 
@@ -16,12 +23,6 @@ function crossSec_dir(dir, d, eps_, alphas, varfun)
 	@setObjective(m, Max, sum{dir[i]*p[i], i=1:d})
 	lazy_P!(m, p, alphas, eps_, phat, varfun)
 end
-
-####
-#Calls used to generate the plots
-#crossSec_plot("pstar50.csv", 50, Dir.VaR)
-#
-#
 
 #varfun should take vs, alphas, eps_ and return var
 function crossSec_plot(path, N, varfun, tag, useSkew=false)
@@ -42,7 +43,6 @@ function crossSec_plot(path, N, varfun, tag, useSkew=false)
 	end
 	close(fp)
 end
-
 
 #repeatedly solve given model adding constrains corresponding to p \in P
 #phat must be a point strictly interior to P

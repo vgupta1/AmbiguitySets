@@ -69,12 +69,12 @@ facts("support Fcns") do
 	@fact var => roughly(0.37703095047921426)
 	@fact pstar[1] => roughly(0.24713880804852523)
 
-	wKL = Dir.KLSet_eps(alphas, eps_)
+	wKL = Dir.KLSet(alphas, eps_)
 	klvar, klpstar = Dir.suppFcn(vs, wKL, :Min)
 	@fact klvar =>roughly(0.27280988597450007)
 	@fact klpstar[1] => roughly(0.2883035532766228)
 
-	wChiSq = Dir.ChiSqSet_eps(alphas, eps_) 
+	wChiSq = Dir.ChiSqSet(alphas, eps_) 
 	chi_var, chi_pstar = Dir.suppFcn(vs, wChiSq, :Min)
 	@fact chi_var =>roughly(0.34690230081245177)
 	@fact chi_pstar[1] => roughly(0.2544700296340291)

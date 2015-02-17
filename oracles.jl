@@ -101,13 +101,15 @@ type KLSet <:AmbiguitySet
 	debug_printcut #false
 	cut_tol #1e-6
 end
-KLSet(alphas, thresh) = KLSet(alphas/sum(alphas), thresh, false, 1e-6)
-function KLSet_eps(alphas, eps_, useCover=false) 
-	if !useCover
-		KLSet(alphas, log(1/eps_)/sum(alphas))
+function KLSet(alphas, eps_, useCover=false; 
+        debug_printcut=false, cut_tol=1e-6) 
+	alpha0 = sum(alphas)
+    if !useCover
+		KLSet(alphas/alpha0, log(1/eps_)/alpha0, debug_printcut, cut_tol)
 	else
 		n = length(alphas)
-		KLSet(alphas, quantile(Distributions.Chisq(n-1), 1-eps_)/sum(alphas)/2)
+		KLSet(alphas/alpha0, quantile(Distributions.Chisq(n-1), 1-eps_)/alpha0/2, 
+                debug_printcut, cut_tol)
 	end
 end
 
@@ -131,13 +133,16 @@ type ChiSqSet <:AmbiguitySet
 	debug_printcut #false
 	cut_tol #1e-6
 end
-ChiSqSet(alphas, thresh) = ChiSqSet(alphas/sum(alphas), thresh, false, 1e-6)
-function ChiSqSet_eps(alphas, eps_, useCover=false) 
+
+function ChiSqSet(alphas, eps_, useCover=false;
+                        debug_printcut=false, cut_tol=1e-6) 
+    alpha0 = sum(alphas)
 	if !useCover
-		ChiSqSet(alphas, log(1/eps_)/sum(alphas))
+		ChiSqSet(alphas/alpha0, log(1/eps_)/alpha0, debug_printcut, cut_tol)
 	else
 		n = length(alphas)
-		ChiSqSet(alphas, quantile(Distributions.Chisq(n-1), 1-eps_)/sum(alphas))
+		ChiSqSet(alphas/alpha0, quantile(Distributions.Chisq(n-1), 1-eps_)/alpha0, 
+                debug_printcut, cut_tol)
 	end
 end
 

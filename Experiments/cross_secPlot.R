@@ -7,14 +7,19 @@ library(dplyr)
 library(extrafont) #for latex fonts
 library(reshape2)
 
-setwd("/Users/vishalgupta/Documents/Research/BayesDRO/AmbiguitySets/Experiments/")
+setwd("/Users/vishalgupta/Documents/Research/BayesDRO/AmbiguitySets/Experiments/Results")
 #font = "CM Roman"
 font = "Times New Roman"
 
 #merge the relevant pieces
-dat = rbind(read.csv("secMom500.csv", header=TRUE), 
-            read.csv("bernvar500.csv", header=TRUE), 
-            read.csv("pstar500.csv", header=TRUE))
+dat = rbind(read.csv("secMom50.csv", header=TRUE), 
+            read.csv("bernvar50.csv", header=TRUE), 
+            read.csv("pstar50.csv", header=TRUE))
+
+# dat = rbind(read.csv("secMom500.csv", header=TRUE), 
+#             read.csv("bernvar500.csv", header=TRUE), 
+#             read.csv("pstar500.csv", header=TRUE))
+
 
 g <- ggplot(aes(x=p1, y=p2, linetype=Type, color=Type), data=dat) + 
   geom_path() + 
@@ -27,7 +32,7 @@ g <- ggplot(aes(x=p1, y=p2, linetype=Type, color=Type), data=dat) +
 mylabs <- c(expression(chi^2), "KL", "Opt")
 g<- g + scale_color_discrete(labels=mylabs) + 
     scale_linetype_discrete(labels=mylabs) + 
-  ylim(0, .45) + xlim(0, .35) +
+  ylim(0, .45) + xlim(0, .4) +
   theme(legend.position= c(.5, .9))
 
 ggsave("../../TexDocuments/Figures/comparisonPlot500.pdf", 
