@@ -29,3 +29,7 @@
 *.pdfsync
 
 #A number of other things are available at https://github.com/github/gitignore/blob/master/TeX.gitignore
+
+
+#Vg
+.csv

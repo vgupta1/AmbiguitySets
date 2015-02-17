@@ -3,24 +3,25 @@ module Dir
 using Distributions, Roots
 
 include("asymptotics.jl")
-include("secMom.jl")
-include("bernstein.jl")
+include("chiSqVar.jl")
+include("klVar.jl")
+include("oracles.jl")
 
 #the relevant integrand
-#vbar = v - te
+#vbars = vs - te
 fint(z, vbars, alphas) = prod((1 + z*vbars).^-alphas)/z
+fint_deriv(z, vbars, alphas) = prod((1 + z*vbars).^-alphas)
 
-#prob_fun(vbars, alphas) => Prob( X(vbars, alphas) > 0 )
-#VG Revisit this to add a timing function
+#prob_fun(vbars, alphas) => Prob( X(vbars, alphas) >= 0 )
 function VaR(vs, alphas, eps_, prob_fun = prob_direct; 
 				tol=1e-6, 
 				tmax=maximum(vs) - tol, 
-				tmin=minimum(vs) + tol, 
-)
+				tmin=minimum(vs) + tol)
 	fzero(t->prob_fun(vs -t, alphas)-1 +eps_, tmin, tmax)
 end
 
 #finds the optimal positive contour for fundamental integral
+#assumes vbars has at least one pos component
 function calc_shift(vbars, alphas_)
 	ps = -1./vbars
 	alphas = alphas_[ps .> 0]
@@ -29,7 +30,7 @@ function calc_shift(vbars, alphas_)
 	ps[ix]/(1 + alphas[ix])
 end
 
-#finds an optimal shift for the deriv integral
+#finds optimal pos contour for the deriv integral
 #assumes vbars has both pos and neg elements
 function calc_shift_deriv(vbars, alphas)
 	imin = indmin(vbars)	
@@ -40,14 +41,8 @@ function calc_shift_deriv(vbars, alphas)
 	(pneg*alphas[imin] + ppos*alphas[imax])/(alphas[imin] + alphas[imax])
 end
 
-function prob_gauss_approx(vbars, alphas)
-	const mu = dot(vbars, alphas)
-	const sig = sqrt(dot(alphas, vbars.^2))
-	cdf(Normal(), -mu/sig)
-end
-
-#Computes Prob(X(vbars, alphas) <= 0)
-#Equivalent to computing the fundamental integral (includes pi scaling)
+#Computes Prob(X(vbars, alphas) <= 0) = Prob(v p <= t)
+#includes pi scaling
 function prob_direct(vbars, alphas)
 	#handle some degnerate cases gracefully
 	if minimum(vbars) > 0
@@ -58,12 +53,11 @@ function prob_direct(vbars, alphas)
 	const a = calc_shift(vbars, alphas)
 	real(quadgk(s->fint(a + s * 1im, vbars, alphas)/pi, 0, Inf)[1])
 end
-fint_deriv(z, vbars, alphas) = prod((1 + z*vbars).^-alphas)
 prob_direct(vs, alphas, t) = prob_direct(vs-t, alphas)
 
 #the gradient of P(v'p <= 0) with respect to v
 function calc_prob_grad(vbars_, alphas_)
-	const d = length(vbars_)
+	d = length(vbars_)
 	filt = vbars_ .!= 0
 	vbars = copy(vbars_)[filt]
 	alphas = copy(alphas_)[filt]
@@ -74,7 +68,7 @@ function calc_prob_grad(vbars_, alphas_)
 	end
 
 	grad = zeros(Float64, d)
-	alphas = copy(alphas_) #safety first
+	alphas = copy(alphas) #safety first
 	for i = 1:d
 		alphas[i] +=1
 		const a = calc_shift_deriv(vbars, alphas)
@@ -88,8 +82,7 @@ function calc_prob_grad(vbars_, alphas_)
 end
 calc_prob_grad(vs, alphas, t) = calc_prob_grad(vs-t, alphas)
 
-#computes the partial derivative of VaR with respect to v_k
-#VG Add a check for degeneray
+#gradient of VaR
 function grad_VaR(vs, alphas, var)
 	#first compute the unscaled partial derivs of P(v'p <=t)
 	const d = length(vs)
@@ -97,33 +90,32 @@ function grad_VaR(vs, alphas, var)
 	grad/sum(grad)
 end
 
-function kl_ratio(vs, alphas, eps_, N)
-	phat, alpha0 = calc_phat(alphas)  #Remember, N and alpha0 may be different
-    Gamma = log(1/eps_) / N
-    bval = bernVar(vs, phat, Gamma)[1] - dot(phat, vs)
-    val = VaR(vs, alphas, eps_, prob_direct) - dot(phat, vs)    
-    bval/val
-end
-
-function kl_ratio_bt(vs, alphas, eps_, d, N)
-	phat, alpha0 = calc_phat(alphas)  #Remember, N and alpha0 may be different
-    Gamma = quantile(Chisq(d-1), 1-eps_)/2N
-    bval = bernVar(vs, phat, Gamma)[1] - dot(phat, vs)
-    val = VaR(vs, alphas, eps_, prob_direct) - dot(phat, vs)    
-    bval/val
-end
-
-function mom_ratio(vs, alphas, eps_)
+function kl_ratio(vs, alphas, eps_)
 	phat, alpha0 = calc_phat(alphas)
-    sm_val = secondMomentVar(vs, alphas, eps_) - dot(phat, vs)
+    Gamma = log(1/eps_) / alpha0
+    bval = KLVarSol(vs, phat, Gamma)[1] - dot(phat, vs)
+    val = VaR(vs, alphas, eps_, prob_direct) - dot(phat, vs)    
+    bval/val
+end
+
+function kl_cov_ratio(vs, alphas, eps_, d, N)
+	phat, alpha0 = calc_phat(alphas)
+    Gamma = quantile(Chisq(d-1), 1-eps_)/2N
+		    bval = KLVarSol(vs, phat, Gamma)[1] - dot(phat, vs)
+    val = VaR(vs, alphas, eps_, prob_direct) - dot(phat, vs)    
+    bval/val
+end
+
+function chisq_ratio(vs, alphas, eps_)
+	phat, alpha0 = calc_phat(alphas)
+    sm_val = chiSqVar(vs, alphas, eps_) - dot(phat, vs)
     val = VaR(vs, alphas, eps_, prob_direct) - dot(phat, vs)    
     sm_val/val
 end
 
-function mom_ratio_bt(vs, alphas, eps_, d, N)
+function chisq_cov_ratio(vs, alphas, eps_, d, N)
 	phat, alpha0 = calc_phat(alphas)
-	sig = sqrt(vs'*sigma(alphas)*vs * alpha0/N )[1] #corrects for def
-	sm_val = sqrt(quantile(Chisq(d-1), 1-eps_)) * sig 
+	sm_val = chiSqVarCov(vs, alphas, eps_, N) - dot(phat, vs)
 	val = VaR(vs, alphas, eps_, prob_direct) - dot(phat, vs)    
 	sm_val / val
 end

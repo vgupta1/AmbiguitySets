@@ -13,9 +13,9 @@ function table_in_d()
 	println("d \t KL \t KLBT \t SM \t Chisq")
 	for d in d_grid
 		print(d, "\t", round(Dir.kl_const(eps_), 2), "\t")
-		print(round(Dir.kl_chisq_const(eps_, d), 2), "\t")
-		print(round(Dir.mom_const(eps_), 2), "\t")
-		print(round(Dir.chisq_const(eps_, d), 2), "\n")
+		print(round(Dir.kl_cov_const(eps_, d), 2), "\t")
+		print(round(Dir.chisq_const(eps_), 2), "\t")
+		print(round(Dir.chisq_cov_const(eps_, d), 2), "\n")
 	end
 end
 
@@ -36,9 +36,9 @@ function plots_in_N(dir_path, path)
 
 	#add the asymptotic values
 	writecsv(fp, [0 "KL" 0 Dir.kl_const(eps_)])
-	writecsv(fp, [0 "ChiSq" 0 Dir.mom_const(eps_)])
-	writecsv(fp, [0 "KL_C" 0 Dir.kl_chisq_const(eps_, d)])
-	writecsv(fp, [0 "ChiSq_C" 0 Dir.chisq_const(eps_, d)])
+	writecsv(fp, [0 "ChiSq" 0 Dir.chisq_const(eps_)])
+	writecsv(fp, [0 "KL_C" 0 Dir.kl_cov_const(eps_, d)])
+	writecsv(fp, [0 "ChiSq_C" 0 Dir.chisq_cov_const(eps_, d)])
 
 	#simulate a long data-stream to reuse
 	dat = rand(DiscreteUniform(1, d), N_grid[end])
@@ -48,10 +48,10 @@ function plots_in_N(dir_path, path)
 	    alphas += ones(d)
 
 	    for ix = 1:size(vs, 2)
-	    	writecsv(fp, [N "KL" ix Dir.kl_ratio(vs[:, ix], alphas, eps_, N)])
-	    	writecsv(fp, [N "ChiSq" ix Dir.mom_ratio(vs[:, ix], alphas, eps_)])
-	    	writecsv(fp, [N "KL_C" ix Dir.kl_ratio_bt(vs[:, ix], alphas, eps_, d, N)])
-	    	writecsv(fp, [N "ChiSq_C" ix Dir.mom_ratio_bt(vs[:, ix], alphas, eps_, d, N)])
+	    	writecsv(fp, [N "KL" ix Dir.kl_ratio(vs[:, ix], alphas, eps_)])
+	    	writecsv(fp, [N "ChiSq" ix Dir.chisq_ratio(vs[:, ix], alphas, eps_)])
+	    	writecsv(fp, [N "KL_C" ix Dir.kl_cov_ratio(vs[:, ix], alphas, eps_, d, N)])
+	    	writecsv(fp, [N "ChiSq_C" ix Dir.chisq_cov_ratio(vs[:, ix], alphas, eps_, d, N)])
 	    end
 	end
 	close(fp)
@@ -60,7 +60,7 @@ end
 function plot_in_eps(path)
 	eps_grid = linspace(.01, .4, 20)
 	kl_vals = map(Dir.kl_const, eps_grid)
-	mom_vals = map(Dir.mom_const, eps_grid)
+	mom_vals = map(Dir.chisq_const, eps_grid)
 	fp = open(path, "w")
 	writecsv(fp, ["eps" "KL" "ChiSq"])
 	writecsv(fp, [eps_grid kl_vals mom_vals])

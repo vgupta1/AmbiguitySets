@@ -2,7 +2,7 @@
 # Using the benrstein type stuff
 ##########
 using JuMP
-function bernVar(vs, phat, Gamma; TOL = 1e-8, factor=10)
+function KLVarSol(vs, phat, Gamma; TOL = 1e-8, factor=10)
 	if maximum(vs) - minimum(vs) < TOL
 		println("Degenerate")
 		return maximum(vs)
@@ -18,6 +18,19 @@ function bernVar(vs, phat, Gamma; TOL = 1e-8, factor=10)
 	theta_opt = fzero(theta->f(theta)[1], low, high)
 	p_opt = f(theta_opt)[2]
 	dot(vs, p_opt), p_opt
+end
+
+#to match other signatures
+function KLVar(vs, alphas, eps_)
+	phat = alphas/sum(alphas)
+	Gamma = log(1/eps_)/sum(alphas)  #approximates N = sum(alphas)
+	KLVarSol(vs, phat, Gamma)[1]
+end
+
+function KLVarCov(vs, alphas, eps_)
+	phat = alphas/sum(alphas)
+	Gamma = Distributions.Chisq(length(alphas)-1, 1-eps_)/2/sum(alphas)
+	KLVarSol(vs, phat, Gamma)[1]
 end
 
 #computes a valid bracket by multiplicative search

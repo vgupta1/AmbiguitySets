@@ -3,7 +3,7 @@
 using JuMP, Roots
 include("../DirRes.jl")
 
-function crossSec_dir(dir, d, eps_, alphas)
+function crossSec_dir(dir, d, eps_, alphas, varfun)
 	phat = alphas/sum(alphas)
 
 	#set up the basic model
@@ -14,19 +14,31 @@ function crossSec_dir(dir, d, eps_, alphas)
 		@addConstraint(m, p[j] == phat[j])
 	end
 	@setObjective(m, Max, sum{dir[i]*p[i], i=1:d})
-	lazy_P!(m, p, alphas, eps_, phat)
+	lazy_P!(m, p, alphas, eps_, phat, varfun)
 end
 
-function crossSec_plotPstar(path, N)
+####
+#Calls used to generate the plots
+#crossSec_plot("pstar50.csv", 50, Dir.VaR)
+#
+#
+
+#varfun should take vs, alphas, eps_ and return var
+function crossSec_plot(path, N, varfun, tag, useSkew=false)
 	d = 5; eps_ = .1
-	alphas = fill(ifloor(N/d), d)
+	if useSkew
+		alphas = [d, 1, 2, 2, 2]
+		alphas = ifloor(N/sum(alphas)) * alphas
+	else
+		alphas = fill(ifloor(N/d), d)
+	end
 
 	fp = open(path, "w")
 	writecsv(fp, ["NumPts" "Type" "x" "y" "p1" "p2"])
 	for theta = linspace(0, 2pi, 100)
 		dir = [cos(theta), sin(theta), zeros(d-2)]
-		pstar = crossSec_dir(dir, d, eps_, alphas)[:]
-		writecsv(fp, [N "pstar" cos(theta) sin(theta) pstar[1:2]'])
+		pstar = crossSec_dir(dir, d, eps_, alphas, varfun)[:]
+		writecsv(fp, [N tag cos(theta) sin(theta) pstar[1:2]'])
 	end
 	close(fp)
 end
@@ -34,7 +46,7 @@ end
 
 #repeatedly solve given model adding constrains corresponding to p \in P
 #phat must be a point strictly interior to P
-function lazy_P!(m, p, alphas, eps_, phat)
+function lazy_P!(m, p, alphas, eps_, phat, varfun)
 	TOL = 1e-6; MAXITER = 100; iter = 1
 
 	const d = length(phat)
@@ -47,7 +59,7 @@ function lazy_P!(m, p, alphas, eps_, phat)
 		solve(m)
 		pstar = getValue(p)
 		vs = pstar - phat
-		var = Dir.VaR(vs, alphas, eps_)
+		var = varfun(vs, alphas, eps_)
 		prod = dot(vs, pstar)
 		iter +=1
 	end
