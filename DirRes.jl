@@ -14,10 +14,19 @@ fint_deriv(z, vbars, alphas) = prod((1 + z*vbars).^-alphas)
 
 #prob_fun(vbars, alphas) => Prob( X(vbars, alphas) >= 0 )
 function VaR(vs, alphas, eps_, prob_fun = prob_direct; 
-				tol=1e-6, 
-				tmax=maximum(vs) - tol, 
-				tmin=minimum(vs) + tol)
-	fzero(t->prob_fun(vs -t, alphas)-1 +eps_, tmin, tmax)
+				tol=1e-6)
+	#rescale vs to make life easier
+	scale = mean(abs(vs))
+	vs = vs/scale
+	tmin = minimum(vs) + tol
+	tmax = maximum(vs) - tol
+	
+	if tmax-tmin <= 2tol #degenerate case where all vs equal
+		println("degenerate var")
+		return scale
+	else
+		scale * fzero(t->prob_fun(vs-t, alphas)-1+eps_, tmin, tmax)
+	end
 end
 
 #finds the optimal positive contour for fundamental integral
@@ -55,12 +64,10 @@ function prob_direct(vbars, alphas)
 end
 prob_direct(vs, alphas, t) = prob_direct(vs-t, alphas)
 
-#the gradient of P(v'p <= 0) with respect to v
-function calc_prob_grad(vbars_, alphas_)
-	d = length(vbars_)
-	filt = vbars_ .!= 0
-	vbars = copy(vbars_)[filt]
-	alphas = copy(alphas_)[filt]
+#the gradient of P(vbars'p <= 0) with respect to vbars
+function calc_prob_grad(vbars, alphas)
+	d = length(vbars)
+	@assert minimum(alphas) > 0 "alphas not positive $alphas_"
 
 	#degenerate case
 	if (maximum(vbars) < 0) || (minimum(vbars) > 0)
@@ -84,9 +91,17 @@ calc_prob_grad(vs, alphas, t) = calc_prob_grad(vs-t, alphas)
 
 #gradient of VaR
 function grad_VaR(vs, alphas, var)
+	TOL = 1e-10
+	#handle the degenerate case
+	if maximum(abs(vs-var)) <= TOL
+		#any element should work?
+		return alphas/sum(alphas)
+	end
+
 	#first compute the unscaled partial derivs of P(v'p <=t)
 	const d = length(vs)
 	grad = calc_prob_grad(vs, alphas, var)
+	@assert sum(grad) < TOL "gradient is zero for v $vs"
 	grad/sum(grad)
 end
 

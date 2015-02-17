@@ -13,6 +13,7 @@ facts("simpleVarCalcs") do
 
 	var = Dir.VaR(vs, alphas, eps_)
 	@fact var =>roughly(0.6911925526746056)
+	@fact Dir.prob_direct(vs, alphas, var) =>roughly(1-eps_)
 
 	dir = randn(n)
 	grad = Dir.grad_VaR(vs, alphas, var)	
