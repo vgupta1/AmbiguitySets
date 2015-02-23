@@ -57,7 +57,7 @@ generateReform(w::AmbiguitySet, m::Model, rm::Model, inds::Vector{Int}) = 0
 
 function setup(w::AmbiguitySet, rm::Model, prefs)
     # Extract preferences we care about
-    w.debug_printcut = get(prefs, :debug_printcut, false)
+    w.debug_printcut = get(prefs, :debug_printcut, w.debug_printcut)
     w.cut_tol        = get(prefs, :cut_tol, w.cut_tol)
 
     rd = JuMPeR.getRobust(rm)
@@ -75,8 +75,8 @@ type OptDirichlet <:AmbiguitySet
 	eps_
 
 	# Assumed to be members of all ambiguity sets
-	debug_printcut #false
-	cut_tol #1e-6
+	debug_printcut 
+	cut_tol 
 end
 supp_size(w::OptDirichlet) = length(w.alphas)
 OptDirichlet(alphas, eps_) = OptDirichlet(alphas, eps_, false, 1e-6)
@@ -87,8 +87,10 @@ function suppFcn(vs, w::OptDirichlet, cut_sense)
         vs = -vs
         toggle = -1
     end
-    var = VaR(vs, w.alphas, w.eps_)
+    var = VaR(vs, w.alphas, w.eps_, tol=1e-6)
     grad = grad_VaR(vs, w.alphas, var)
+    @assert abs(var - dot(vs, grad)) <= 1e-10 "Var not match $abs(var - dot(vs, grad))"
+    #println(grad)
 
     return var*toggle, grad
 end
@@ -133,7 +135,7 @@ type ChiSqSet <:AmbiguitySet
 	debug_printcut #false
 	cut_tol #1e-6
 end
-
+supp_size(w::ChiSqSet) = length(w.phat)
 function ChiSqSet(alphas, eps_, useCover=false;
                         debug_printcut=false, cut_tol=1e-6) 
     alpha0 = sum(alphas)

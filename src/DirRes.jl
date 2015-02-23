@@ -22,7 +22,6 @@ function VaR(vs, alphas, eps_, prob_fun = prob_direct;
 	tmax = maximum(vs) - tol
 	
 	if tmax-tmin <= 2tol #degenerate case where all vs equal
-		println("degenerate var")
 		return scale
 	else
 		scale * fzero(t->prob_fun(vs-t, alphas)-1+eps_, tmin, tmax)
@@ -67,7 +66,7 @@ prob_direct(vs, alphas, t) = prob_direct(vs-t, alphas)
 #the gradient of P(vbars'p <= 0) with respect to vbars
 function calc_prob_grad(vbars, alphas)
 	d = length(vbars)
-	@assert minimum(alphas) > 0 "alphas not positive $alphas_"
+	@assert minimum(alphas) > 0 "alphas not positive $alphas"
 
 	#degenerate case
 	if (maximum(vbars) < 0) || (minimum(vbars) > 0)
@@ -75,7 +74,7 @@ function calc_prob_grad(vbars, alphas)
 	end
 
 	grad = zeros(Float64, d)
-	alphas = copy(alphas) #safety first
+	alphas = copy(alphas) #safety over efficiency
 	for i = 1:d
 		alphas[i] +=1
 		const a = calc_shift_deriv(vbars, alphas)
@@ -101,7 +100,7 @@ function grad_VaR(vs, alphas, var)
 	#first compute the unscaled partial derivs of P(v'p <=t)
 	const d = length(vs)
 	grad = calc_prob_grad(vs, alphas, var)
-	@assert sum(grad) < TOL "gradient is zero for v $vs"
+	@assert abs(sum(grad)) > TOL "gradient is zero for var $var \n v $vs \n alphas $alphas \t $grad"
 	grad/sum(grad)
 end
 

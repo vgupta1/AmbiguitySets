@@ -3,9 +3,9 @@
 ##########
 using JuMP
 function KLVarSol(vs, phat, Gamma; TOL = 1e-8, factor=10)
-	if maximum(vs) - minimum(vs) < TOL
-		println("Degenerate")
-		return maximum(vs)
+	#degeneracy
+	if maximum(vs) - minimum(vs) < TOL		
+		return maximum(vs), phat
 	end
 
 	#fcn arises from KKT conditions

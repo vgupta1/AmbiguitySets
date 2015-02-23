@@ -41,6 +41,12 @@ end
 function chiSqVarSol(vs, alphas, thresh)
 	const sqrt_thresh = sqrt(thresh)
 	const phat, alpha0 = calc_phat(alphas)
+	const TOL = 1e-8 
+
+	#degenerate case
+	if maximum(vs) - minimum(vs)<= TOL
+		return maximum(vs), phat
+	end
 
 	#first form a solution ignoring the support constranits
 	sigmavs = unscaled_sigma_(phat) * vs
@@ -51,7 +57,7 @@ function chiSqVarSol(vs, alphas, thresh)
 		mu = dot(vs, phat)
 		n = length(phat)
 		var = mu + sqrt_thresh * sig
-		@assert abs(dot(pstar, vs) - var) <= 1e-8
+		@assert abs(dot(pstar, vs) - var) <= TOL
 		return dot(vs, pstar), pstar
 	else
 		#need to solve the actual optimization
