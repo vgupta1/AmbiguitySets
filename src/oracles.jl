@@ -89,9 +89,7 @@ function suppFcn(vs, w::OptDirichlet, cut_sense)
     end
     var = VaR(vs, w.alphas, w.eps_, tol=1e-6)
     grad = grad_VaR(vs, w.alphas, var)
-    @assert abs(var - dot(vs, grad)) <= 1e-10 "Var not match $abs(var - dot(vs, grad))"
-    #println(grad)
-
+    @assert abs(var - dot(vs, grad)) <= 1e-8 "Var not match $(abs(var - dot(vs, grad)))"
     return var*toggle, grad
 end
 
@@ -140,10 +138,13 @@ function ChiSqSet(alphas, eps_, useCover=false;
                         debug_printcut=false, cut_tol=1e-6) 
     alpha0 = sum(alphas)
 	if !useCover
-		ChiSqSet(alphas/alpha0, log(1/eps_)/alpha0, debug_printcut, cut_tol)
+        const thresh = (1/eps_ -1)/(alpha0 + 1)
+        println("Size:\t", thresh)
+		ChiSqSet(alphas/alpha0, thresh, debug_printcut, cut_tol)
 	else
 		n = length(alphas)
-		ChiSqSet(alphas/alpha0, quantile(Distributions.Chisq(n-1), 1-eps_)/alpha0, 
+        println("Size:\t", quantile(Distributions.Chisq(n-1), 1-eps_)/alpha0)
+        ChiSqSet(alphas/alpha0, quantile(Distributions.Chisq(n-1), 1-eps_)/alpha0, 
                 debug_printcut, cut_tol)
 	end
 end

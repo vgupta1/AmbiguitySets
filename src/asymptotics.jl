@@ -27,3 +27,9 @@ end
 function chisq_cov_const(eps_, d)
 	sqrt(quantile(Distributions.Chisq(d-1), 1-eps_)) / invnorm(1-eps_)
 end
+
+
+#the general covering ratio
+function cov_const(eps_, d)
+	sqrt(quantile(Distributions.Chisq(d-1), 1-eps_)) / invnorm(1-eps_)
+end

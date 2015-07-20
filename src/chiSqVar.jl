@@ -1,7 +1,7 @@
 #####
 # The second moment VaR
 #####
-using JuMP
+using JuMP, Gurobi
 
 function calc_phat(alphas) 
 	const alpha0 = sum(alphas)
@@ -61,7 +61,7 @@ function chiSqVarSol(vs, alphas, thresh)
 		return dot(vs, pstar), pstar
 	else
 		#need to solve the actual optimization
-		m = Model()
+		m = Model(solver=GurobiSolver(OutputFlag=0))
 		n = length(phat)
 		@defVar(m, ps[1:n] >= 0)
 		@addConstraint(m, sum{ps[i], i=1:n} == 1)

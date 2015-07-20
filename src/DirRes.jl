@@ -17,15 +17,14 @@ function VaR(vs, alphas, eps_, prob_fun = prob_direct;
 				tol=1e-6)
 	#rescale vs to make life easier
 	scale = mean(abs(vs))
-	vs = vs/scale
+	vs = vs/scale 
 	tmin = minimum(vs) + tol
-	tmax = maximum(vs) - tol
-	
-	if tmax-tmin <= 2tol #degenerate case where all vs equal
+	if maximum(vs)-tmin <= 2tol #degenerate case where all vs equal
 		return scale
-	else
-		scale * fzero(t->prob_fun(vs-t, alphas)-1+eps_, tmin, tmax)
 	end
+
+	tmax = KLVar(vs, alphas, eps_) #a more expensive, but better starting pt
+	scale * fzero(t->prob_fun(vs-t, alphas)-1+eps_, tmin, tmax)
 end
 
 #finds the optimal positive contour for fundamental integral
@@ -46,20 +45,40 @@ function calc_shift_deriv(vbars, alphas)
 	pneg = -1/vbars[imax]
 	ppos = -1/vbars[imin]
 	@assert pneg*ppos < 0
-	(pneg*alphas[imin] + ppos*alphas[imax])/(alphas[imin] + alphas[imax])
+
+	#check the asymptotic result
+	a = dot(alphas, vbars)/ dot(alphas, vbars.^2)
+	if pneg <= a <= ppos
+		return a
+	else
+		println("old way")
+		(pneg*alphas[imin] + ppos*alphas[imax])/(alphas[imin] + alphas[imax])
+	end
 end
 
 #Computes Prob(X(vbars, alphas) <= 0) = Prob(v p <= t)
 #includes pi scaling
 function prob_direct(vbars, alphas)
 	#handle some degnerate cases gracefully
-	if minimum(vbars) > 0
+	if minimum(vbars) >= 0
 		return 0.
 	elseif maximum(vbars) <= 0
 		return 1.
 	end
 	const a = calc_shift(vbars, alphas)
-	real(quadgk(s->fint(a + s * 1im, vbars, alphas)/pi, 0, Inf)[1])
+	I, E = quadgk(s->fint(a + s * 1im, vbars, alphas)/pi, 0, Inf)
+	if E > 1e-6
+		println("Bad Integral:\t", real(I), "\t", E)
+		println("vs:\t", vbars)
+		println("alphas:\t", alphas)
+		println()
+	end
+	real(I)
+	# if abs(E/real(I)) > 1e-5
+	# 	println("using Big Floats")
+	# 	I, E = quadgk(s->fint(a + s * 1im, vbars, alphas)/pi, zero(BigFloat), BigFloat(Inf))
+	# end
+	# float(real(I))
 end
 prob_direct(vs, alphas, t) = prob_direct(vs-t, alphas)
 
@@ -75,28 +94,51 @@ function calc_prob_grad(vbars, alphas)
 
 	grad = zeros(Float64, d)
 	alphas = copy(alphas) #safety over efficiency
+
 	for i = 1:d
 		alphas[i] +=1
 		const a = calc_shift_deriv(vbars, alphas)
-		grad[i] = real(quadgk(s->fint_deriv(a + s * 1im, 
-											vbars, alphas)/pi, 
-								0, Inf)[1])				
+		#try it once with ordinary floats
+		I, E = quadgk(s->fint_deriv(a + s * 1im, vbars, alphas)/pi, 
+								0., 3.)
+		if E > 1e-6
+			println("Bad Deriv Integral:\t", i, "\t", real(I), "\t", E, "\t", E/real(I))
+			println("vs:\t", vbars)
+			println("alphas:\t", alphas)
+			println("hderiv(a):\t", fint_deriv(a, vbars, alphas)/pi)
+			println()
+
+		end
+
+		#Use exact arithmetic to avoid the numerical stability
+		#very slow...
+		# if abs(E/real(I)) > 1e-5
+		# 	println("using Big Floats")
+		# 	I, E = quadgk(s->fint_deriv(a + s * 1im, vbars, alphas)/pi, 
+		# 						zero(BigFloat), BigFloat(Inf))
+		# end
+
+		grad[i] = real(I)				
 		alphas[i] -=1
 		grad[i] *= -alphas[i]
 	end
-	grad
+	min(0., grad)  #this is to correct for small overflow errors
 end
 calc_prob_grad(vs, alphas, t) = calc_prob_grad(vs-t, alphas)
 
 #gradient of VaR
 function grad_VaR(vs, alphas, var)
 	TOL = 1e-10
+	#rescale for nicety
+	scale = mean(abs(vs))
+	vs = vs/scale
+	var = var/scale 
+
 	#handle the degenerate case
 	if maximum(abs(vs-var)) <= TOL
-		#any element should work?
+		#any element should work
 		return alphas/sum(alphas)
 	end
-
 	#first compute the unscaled partial derivs of P(v'p <=t)
 	const d = length(vs)
 	grad = calc_prob_grad(vs, alphas, var)
