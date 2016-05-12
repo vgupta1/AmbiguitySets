@@ -7,13 +7,13 @@ using Distributions, Gurobi, JuMP, JuMPeR, Dir
 
 
 #createss supp of distribution most recent numPts of KF dataset
-function getMktSupp(numPts, path="12_Industry_Portfolios_clean.csv")
+function getMktSupp(numPts, path="Data//12_Industry_Portfolios_clean.csv")
 	#load up the data set
 	dat, header = readdlm(path, ',', '\r', header=true)
 	dat[end-numPts+1:end, 2:end]
 end
 
-function mktCVars(numPts, eps_=.1, path="12_Industry_Portfolios_clean.csv")
+function mktCVars(numPts, eps_=.1, path="Data//12_Industry_Portfolios_clean.csv")
 	dat = getMktSupp(numPts, path)
 	d = size(dat, 1)
 	phat = ones(d)/d
@@ -91,14 +91,14 @@ function chisq_port(eps_, budget, supp, cnts, useCover)
 	@defVar(m, zs[1:d] >= 0) #
 	@defVar(m, Beta)
 	@defVar(m, obj)
-	addConstraint(m, sum([ps[j]*dot(vec(supp[j, :]), xs) for j=1:d]) >= obj)
+	@addConstraint(m, sum([ps[j]*dot(vec(supp[j, :]), xs) for j=1:d]) >= obj)
 	@setObjective(m, Max, obj)
 
 	for j=1:d
 		@addConstraint(m, -dot(vec(supp[j, :]), xs[:])  - Beta <= zs[j])
 	end
-	addConstraint(m, sum([ps[j]*zs[j]/eps_ for j=1:d]) + Beta <= budget)	
-	solveRobust(m, prefer_cuts=true)
+	@addConstraint(m, sum([ps[j]*zs[j]/eps_ for j=1:d]) + Beta <= budget)	
+	solve(m, prefer_cuts=true)
 	getObjectiveValue(m), getValue(xs[:])
 end
 
@@ -112,17 +112,17 @@ function kl_port(eps_, budget, supp, cnts, useCover)
 	@addConstraint(m, sum(xs) <= 1)
 	@defUnc(m, ps[1:d])
 
-	@defVar(m, zs[1:d] >= 0) #
+	@defVar(m, zs[1:d] >= 0)
 	@defVar(m, Beta)
 	@defVar(m, obj)
-	addConstraint(m, sum([ps[j]*dot(vec(supp[j, :]), xs) for j=1:d]) >= obj)
+	@addConstraint(m, sum([ps[j]*dot(vec(supp[j, :]), xs) for j=1:d]) >= obj)
 	@setObjective(m, Max, obj)
 
 	for j=1:d
 		@addConstraint(m, -dot(vec(supp[j, :]), xs[:])  - Beta <= zs[j])
 	end
-	addConstraint(m, sum([ps[j]*zs[j]/eps_ for j=1:d]) + Beta <= budget)	
-	solveRobust(m, prefer_cuts=true)
+	@addConstraint(m, sum([ps[j]*zs[j]/eps_ for j=1:d]) + Beta <= budget)	
+	solve(m, prefer_cuts=true)
 	getObjectiveValue(m), getValue(xs[:])
 end
 
@@ -194,8 +194,8 @@ end
 
 ## dump some stuff to files to look at plots
 function test2(d, numRuns=100; budget=3, seed=nothing, eps_=.1)
-	f = open("Results/portExp2_$(d)_$(budget).csv", "w")
-	writecsv(f, ["Run" "N" "Method" "inReturn" "outReturn" "CVaR"])
+	f = open("Results/portExp2a_$(d)_$(budget).csv", "w")
+	writecsv(f, ["Run" "N" "Method" "inReturn" "outReturn" "CVaR" "X_Norm"])
 	seed != nothing && srand(seed)
 	supp = getMktSupp(d)
 
@@ -209,19 +209,19 @@ function test2(d, numRuns=100; budget=3, seed=nothing, eps_=.1)
 			zkl, xkl = kl_port(eps_, budget, supp, cnts, false)
 
 			outsaa, cvarsaa = out_perf(xsaa, eps_, supp)
-			writecsv(f, [iSim N "SAA" zsaa outsaa cvarsaa])
+			writecsv(f, [iSim N "SAA" zsaa outsaa cvarsaa norm(xsaa)])
 
 			outchisq, cvarchisq = out_perf(xchisq, eps_, supp)
-			writecsv(f, [iSim N "Chisq" zchisq outchisq cvarchisq])
+			writecsv(f, [iSim N "Chisq" zchisq outchisq cvarchisq norm(xchisq)])
 
 			out_chi_cov, cvar_chi_cov = out_perf(xchisq_cov, eps_, supp)
-			writecsv(f, [iSim N "ChisqCov" zchisq_cov out_chi_cov cvar_chi_cov])
+			writecsv(f, [iSim N "ChisqCov" zchisq_cov out_chi_cov cvar_chi_cov norm(xchisq_cov)])
 
 			outkl, cvarkl = out_perf(xkl, eps_, supp)
-			writecsv(f, [iSim N "KL" zkl outkl cvarkl])
+			writecsv(f, [iSim N "KL" zkl outkl cvarkl norm(xkl)])
 
 			outkl_cov, cvarkl_cov = out_perf(xkl_cov, eps_, supp)
-			writecsv(f, [iSim N "KLCov" zkl_cov outkl_cov cvarkl_cov])
+			writecsv(f, [iSim N "KLCov" zkl_cov outkl_cov cvarkl_cov norm(xkl_cov)])
 		end
 	end
 	close(f)
@@ -229,7 +229,7 @@ end
 
 
 function test_incr_d(N, numRuns; budget=3, eps_=.1, seed=nothing)
-	f = open("Results/incrDExp_$(N)_$(budget).csv", "w")
+	f = open("Results/incrDExp_a_$(N)_$(budget).csv", "w")
 	writecsv(f, ["Run" "d" "Method" "inReturn" "outReturn" "CVaR"])
 	seed != nothing && srand(seed)
 
@@ -263,33 +263,36 @@ function test_incr_d(N, numRuns; budget=3, eps_=.1, seed=nothing)
 end
 
 #Generate data and a wrong prior and then assess
-function test_wrongPrior(d, N, numRuns; budget=3, seed=nothing, scale=.1)
-	f = open("Results/randWrongPrior_$(N)_$(scale).csv", "w")
-	writecsv(f, ["Run" "Dist" "Method" "inReturn" "outReturn" "CVaR"])
+function test_wrongPrior(d, N, numRuns; budget=3, seed=nothing)
+	f = open("Results/randWrongPrior_$(N)_$(seed).csv", "w")
+	writecsv(f, ["Run" "Dist" "Scale" "Method" "inReturn" "outReturn" "CVaR"])
 	seed != nothing && srand(seed)
 	eps_ = .1
+	scale_grid = collect(.1:.1:2.)
 
 	supp = getMktSupp(d)
 	cnts = buildSynthMkt(N, supp)
 	pstar = ones(d)/d
 
-	for iSim = 1:numRuns
-		pseudo_cnts = rand(d)
-		pseudo_cnts /= sum(pseudo_cnts)
-		#calculate the distance
-		dist = dot(pseudo_cnts, log(pseudo_cnts ./ pstar))
+	for scale in scale_grid
+		for iSim = 1:numRuns
+			pseudo_cnts = rand(d)
+			pseudo_cnts /= sum(pseudo_cnts)
+			#calculate the distance
+			dist = norm(pseudo_cnts - pstar)
 
-		#scale up
-		pseudo_cnts *= N * scale
+			#scale up
+			pseudo_cnts *= N * scale
 
-		zchisq, xchisq = chisq_port(eps_, budget, supp, cnts+ pseudo_cnts, false)
-		zkl, xkl = kl_port(eps_, budget, supp, cnts + pseudo_cnts, false)
+			zchisq, xchisq = chisq_port(eps_, budget, supp, cnts+ pseudo_cnts, false)
+			zkl, xkl = kl_port(eps_, budget, supp, cnts + pseudo_cnts, false)
 
-		outchisq, cvarchisq = out_perf(xchisq, eps_, supp)
-		writecsv(f, [iSim dist "Chisq" zchisq outchisq cvarchisq])
+			outchisq, cvarchisq = out_perf(xchisq, eps_, supp)
+			writecsv(f, [iSim dist scale "Chisq" zchisq outchisq cvarchisq])
 
-		outkl, cvarkl = out_perf(xkl, eps_, supp)
-		writecsv(f, [iSim dist "KL" zkl outkl cvarkl])
+			outkl, cvarkl = out_perf(xkl, eps_, supp)
+			writecsv(f, [iSim dist scale "KL" zkl outkl cvarkl])
+		end
 	end
 	close(f)
 end

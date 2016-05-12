@@ -22,7 +22,7 @@ registerConstraint(w::AmbiguitySet, rm::Model, ind::Int, prefs) =
 
 # JuMPeR wants us to generate a constraint for every uncertain constraint in inds
 function generateCut(w::AmbiguitySet, m::Model, rm::Model, inds::Vector{Int}, active=false)
-    new_cons = {}
+    new_cons = []
     rd = JuMPeR.getRobust(rm)
     for ind in inds
         con = JuMPeR.get_uncertain_constraint(rm, ind)
