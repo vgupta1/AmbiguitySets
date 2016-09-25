@@ -5,8 +5,9 @@ include("../src/DirRes.jl")
 module port
 using Distributions, Gurobi, JuMP, JuMPeR, Dir
 
-## build a dataset
-## outputs a matrix of the various support pts, and a vector of counts
+# VG See if you can kill this
+# build a simple synthetic market for debugging
+# output: Matrix of Support pts, vector of counts
 function buildMkt(N; numAssets=5)
     #the marginal distn of each asset
     ps = [.2, .2, .2, .2, .2]
@@ -37,9 +38,9 @@ function buildMkt(N; numAssets=5)
     supp, cnts
 end
 
-
+#builds a synthetic market based on an approximatley low-rank multivariate normal
 function buildMkt2(d, N; numAssets=5)
-	#sample supp from an interesting continuous distribution
+	#suffices to conisder the diagonal case
 	supp = randn(d, numAssets)
 	supp = supp * diagm(linspace(.1, .3, numAssets))
 	supp = broadcast(+, linspace(0, .1, numAssets)', supp)
@@ -54,7 +55,34 @@ function buildMkt2(d, N; numAssets=5)
 	supp, cnts
 end
 
+#Approximate the CVaR of rets by sorting
+#Only accurate up to discretization error
+function cvar_sort(rets, phat, eps_)
+    inds = sortperm(rets)
+    prob = 0.; 
+    cvar = 0
+    for ix = 1:length(rets)
+        if prob >= eps_
+            break
+        else
+            prob += phat[inds[ix]]
+            cvar += phat[inds[ix]] * rets[inds[ix]]
+        end
+    end
+    -cvar / prob
+end
 
+#Out-of-sample performance of a portfolio
+#Assumes pstar = 1/N
+#Output: mean and cvar at eps_
+function out_perf(x, eps_, N_out, supp)
+    d = size(supp, 1)
+    pstar = ones(d)/d
+    rets = supp * x
+    (pstar' * supp * x)[1], cvar_sort(rets, pstar, eps_)
+end
+
+#VG Drop this
 # function saa_port(eps_, budget, supp, counts)
 # 	# solve for the SAA portfolio
 # 	m = Model(solver=GurobiSolver())
@@ -123,33 +151,7 @@ function chisq_port(eps_, budget, supp, cnts, useCover)
 	getObjectiveValue(m), getValue(xs[:])
 end
 
-#proxy CVaR by sorting
-function cvar_sort(rets, phat, eps_)
-	inds = sortperm(rets)
-	prob = 0.; 
-	cvar = 0
-	for ix = 1:length(rets)
-		if prob >= eps_
-			break
-		else
-			prob += phat[inds[ix]]
-			cvar += phat[inds[ix]] * rets[inds[ix]]
-		end
-	end
-	-cvar / prob
-end
-
-#assess out-of-sample performance
-#return the mean and cvar at eps_
-#VG uses assumption that pstar = 1/N
-function out_perf(x, eps_, N_out, supp)
-	d = size(supp, 1)
-	pstar = ones(d)/d
-	rets = supp * x
-	(pstar' * supp * x)[1], cvar_sort(rets, pstar, eps_)
-end
-
-
+#Just for debugging
 function test(d, N, N_out; budget=.2, seed=nothing)
 	seed != nothing && srand(seed)
 	
@@ -201,4 +203,4 @@ function test2(d, N_out, numRuns=100; budget=.2, seed=nothing, eps_=.1)
 	close(f)
 end
 
-end #moduleBadbad
+end #module

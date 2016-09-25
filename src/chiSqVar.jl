@@ -1,5 +1,5 @@
 #####
-# The second moment VaR
+# Sets based on the ChiSq (2nd Moment)
 #####
 using JuMP, Gurobi
 
@@ -8,7 +8,8 @@ function calc_phat(alphas)
 	alphas/alpha0, alpha0
 end
 
-#Sigma in document
+#Unscaled Sigma is diag(p) - p*pT
+#VG replace this function using kron
 function unscaled_sigma_(phat)
 	const d = length(phat)
 	sigma = zeros(Float64, d, d)
@@ -43,7 +44,7 @@ function chiSqVarSol(vs, alphas, thresh)
 	const phat, alpha0 = calc_phat(alphas)
 	const TOL = 1e-8 
 
-	#degenerate case
+	#degenerate case since phat sums to one
 	if maximum(vs) - minimum(vs)<= TOL
 		return maximum(vs), phat
 	end
@@ -73,6 +74,8 @@ function chiSqVarSol(vs, alphas, thresh)
 end
 
 chiSqVar(vs, alphas, eps_) = chiSqVarSol(vs, alphas, (1/eps_-1)/(sum(alphas)+1))[1]
+
+#VG Change this so it doesn't require N
 function chiSqVarCov(vs, alphas, eps_, N)
 	thresh = quantile(Distributions.Chisq(length(alphas)-1), 1-eps_)/N
 	chiSqVarSol(vs, alphas, thresh)[1]

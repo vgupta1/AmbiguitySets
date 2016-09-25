@@ -5,10 +5,9 @@ include("../DirRes.jl")
 
 ####
 #Calls used to generate the plots
-#crossSec_plot("pstar50.csv", 50, Dir.VaR, "pstar")
+#crossSec_plot("Results/pstar50.csv", 50, Dir.VaR, "pstar")
 #crossSec_plot("Results/secMom50.csv", 50, Dir.chiSqVar, "ChiSq")
 #crossSec_plot("Results/bernVar50.csv", 50, Dir.KLVar, "ChiSq")
-
 
 function crossSec_dir(dir, d, eps_, alphas, varfun)
 	phat = alphas/sum(alphas)
@@ -44,7 +43,7 @@ function crossSec_plot(path, N, varfun, tag, useSkew=false)
 	close(fp)
 end
 
-#repeatedly solve given model adding constrains corresponding to p \in P
+#repeatedly solve given model adding constraints corresponding to p \in P
 #phat must be a point strictly interior to P
 function lazy_P!(m, p, alphas, eps_, phat, varfun)
 	TOL = 1e-6; MAXITER = 100; iter = 1

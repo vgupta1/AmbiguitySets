@@ -14,7 +14,7 @@ suppFcn(vs, w::AmbiguitySet, cut_sense) = error("suppFcn not implemented for $(t
 
 #####
 # Common boiler plate for the oracles
-# If you fold this into DDUS, you can tie into DDUSoracles
+# VG: If you fold this into DDUS, you can tie into DDUSoracles
 #####
 # JuMPeR alerting us that we're handling this contraint
 registerConstraint(w::AmbiguitySet, rm::Model, ind::Int, prefs) =

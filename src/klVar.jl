@@ -1,5 +1,5 @@
 #########
-# Using the benrstein type stuff
+# The KL Set (Bernstein type inequality)
 ##########
 using JuMP
 function KLVarSol(vs, phat, Gamma; TOL = 1e-8, factor=10)
@@ -20,13 +20,14 @@ function KLVarSol(vs, phat, Gamma; TOL = 1e-8, factor=10)
 	dot(vs, p_opt), p_opt
 end
 
-#to match other signatures
+#For the near optimal variant
 function KLVar(vs, alphas, eps_)
 	phat = alphas/sum(alphas)
 	Gamma = log(1/eps_)/sum(alphas)  #approximates N = sum(alphas)
 	KLVarSol(vs, phat, Gamma)[1]
 end
 
+#For the coverage variant
 function KLVarCov(vs, alphas, eps_)
 	phat = alphas/sum(alphas)
 	Gamma = Distributions.Chisq(length(alphas)-1, 1-eps_)/2/sum(alphas)

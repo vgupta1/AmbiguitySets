@@ -263,12 +263,12 @@ function test_incr_d(N, numRuns; budget=3, eps_=.1, seed=nothing)
 end
 
 #Generate data and a wrong prior and then assess
-function test_wrongPrior(d, N, numRuns; budget=3, seed=nothing)
-	f = open("Results/randWrongPrior_$(N)_$(seed).csv", "w")
+function test_wrongPrior(d, N, numRuns; budget=3, seed=8675309)
+	f = open("Results/randWrongPrior_$(N)_$(d)_$(seed).csv", "w")
 	writecsv(f, ["Run" "Dist" "Scale" "Method" "inReturn" "outReturn" "CVaR"])
 	seed != nothing && srand(seed)
 	eps_ = .1
-	scale_grid = collect(.1:.1:2.)
+	scale_grid = collect(.1:.1:3.)
 
 	supp = getMktSupp(d)
 	cnts = buildSynthMkt(N, supp)

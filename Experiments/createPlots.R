@@ -1,5 +1,5 @@
 ###  
-# Creates the conv in N Plots for
+# Creates the Conv in N Plots for Paper
 ###
 library(ggplot2)
 library(plyr)
@@ -7,6 +7,7 @@ library(dplyr)
 library(extrafont) #for latex fonts
 library(reshape2)
 
+#VG Kill this before submitting?
 setwd("/Users/vishalgupta/Documents/Research/BayesDRO/AmbiguitySets/Experiments/Results/")
 #font = "CM Roman"
 font = "Times New Roman"

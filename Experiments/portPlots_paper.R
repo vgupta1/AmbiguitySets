@@ -22,6 +22,7 @@ mkt %>% select(-Date) %>% cor()
 
 ### Increasing N plots
 dat = read.csv("Results/portExp2_72_3.csv")
+dat = read.csv("Results/portExp2a_72_3.csv")
 budget = 3
 
 dat.sum<- dat %>% group_by(N, Method) %>%
@@ -32,7 +33,9 @@ dat.sum<- dat %>% group_by(N, Method) %>%
             PerfUp=quantile(outReturn, .9), 
             PerfDown=quantile(outReturn, .1),
             CVaRUp= quantile(CVaR, .90), 
-            CVaRDown=quantile(CVaR, .1))
+            CVaRDown=quantile(CVaR, .1), 
+            NumZero = mean( X_Norm <= .001), 
+            SDPorts = sd(X_Norm))
 
 pos = position_dodge(width=100)
 my.labs <- c(expression(KL), expression(chi^2), expression(KL[C]), expression(chi[C]^2), expression(SAA))
@@ -57,8 +60,63 @@ g <- g + scale_color_discrete(breaks=my.breaks,
 g<- g + theme(legend.position="top", 
               text=element_text(family=font))
 
-ggsave("../../TexDocuments/Figures/portConvInNRet.pdf", 
+ggsave("../../TexDocuments/Figures/portConvInNRet_a.pdf", 
        g, width=3.25, height=3.25, units="in")
+
+
+#### 
+# Temp plot for Engineering
+###
+my.labs <- c(expression(SAA), expression(KL), expression(KL[C]))
+my.breaks <- c("SAA", "KL", "KLCov")
+vals=c("#e41a1c", "#4daf4a", "#4F86FF")
+
+dat.sum <- filter(dat.sum, Method %in% c("SAA", "KL", "KLCov")) %>% 
+  mutate(Method = factor(Method, 
+                         levels=c("SAA", "KL", "KLCov")))
+
+h <- filter(dat.sum, Method %in% c("SAA", "KL")) %>%
+  ggplot(aes(x=N, color=Method, y=outPerf)) + 
+  geom_line(position=pos) + 
+  geom_point(position=pos, size=2) + 
+  geom_errorbar(aes(ymin=PerfDown, ymax=PerfUp), 
+              position=pos, width=30) + 
+  theme_bw(base_size=10) + 
+  theme(legend.title=element_blank()) + 
+  ylab("Return (%)") + 
+  ylim(0, 1.7) + 
+  scale_color_manual(breaks=my.breaks, 
+                     labels=my.labs, 
+                     values=vals) +
+  theme(legend.position=c(.8, .25), 
+              text=element_text(family=font))
+
+ggsave("../../Presentations/USCEngineering_PortSAAKLReturns.pdf", 
+       h, width=3.25, height=3.25, units="in")
+
+h<- filter(dat.sum, Method %in% c("SAA", "KL", "KLCov")) %>%
+  ggplot(aes(x=N, color=Method, y=outCVaR), 
+         data=.) +
+  geom_line(position=pos) + 
+  geom_point(position=pos, size=2) +
+  geom_errorbar(aes(ymin=CVaRDown, ymax=CVaRUp), position=pos, width=30) + 
+  theme_bw(base_size=10) + 
+  theme(legend.title=element_blank(), 
+        text=element_text(family=font), 
+        legend.position=c(.8, .2)) + 
+  ylab("CVaR (%)") +
+  scale_color_manual(breaks=my.breaks, 
+                     labels=my.labs, 
+                     values=vals) +
+  geom_hline(yintercept=3, linetype="dashed") + 
+  ylim(0, 4.7)
+
+ggsave("../../Presentations/USCEngineering_PortAllRisk.pdf", 
+       h, width=3.25, height=3.25, units="in")
+
+
+
+######
 
 
 g<- ggplot(aes(x=N, color=Method, shape=Method, y=outCVaR), data=dat.sum) +
@@ -79,7 +137,7 @@ g <- g + scale_color_discrete(breaks=my.breaks,
   scale_linetype_discrete(breaks = my.breaks, labels=my.labs)
 
 
-ggsave("../../TexDocuments/Figures/portConvInNRisk.pdf", 
+ggsave("../../TexDocuments/Figures/portConvInNRisk_a.pdf", 
        g, width=3.25, height=3.25, units="in")
 
 dat.sum %>% filter(N > 750) %>%
@@ -87,9 +145,29 @@ dat.sum %>% filter(N > 750) %>%
 
 dat.sum %>% filter(Method %in% c("KL", "Chisq"))
 
+###isolate the number of times something is zero
+ggplot(aes(x=N, y=NumZero, fill=Method,group=Method), data=dat.sum) +
+  geom_bar(stat = "identity", position="dodge")
+
+dat.sum %>% 
+  select(N, Method, NumZero) %>%
+  dcast(N ~ Method)
+
+dat.sum %>% 
+  select(N, Method, SDPorts) %>%
+  dcast(N ~ Method)
+
+
+
+
+
+
+
 ########
 # Increasing d plots
-dat = dat = read.csv("Results/incrDExp_300_3.csv")
+dat = read.csv("Results/incrDExp_a_300_3.csv")
+dat = read.csv("Results/incrDExp_a_750_3.csv")
+
 dat.sum<- dat %>% group_by(d, Method) %>%
   summarise(InPerf=mean(inReturn), 
             outPerf=mean(outReturn), 
@@ -119,7 +197,7 @@ g <- g + scale_color_discrete(breaks=my.breaks,
                        labels=my.labs) +
   scale_linetype_discrete(breaks = my.breaks, labels=my.labs)
 
-ggsave("../../TexDocuments/Figures/portConvInDRet.pdf", 
+ggsave("../../TexDocuments/Figures/portConvInDRet_700_a.pdf", 
        g, width=3.25, height=3.25, units="in")
 
 
@@ -141,7 +219,7 @@ g <- g + scale_color_discrete(breaks=my.breaks,
   scale_linetype_discrete(breaks = my.breaks, labels=my.labs)
 
 
-ggsave("../../TexDocuments/Figures/portConvInDRisk.pdf", 
+ggsave("../../TexDocuments/Figures/portConvInDRisk_700_a.pdf", 
        g, width=3.25, height=3.25, units="in")
 
 #################
@@ -187,6 +265,32 @@ g<- ggplot(aes(x=N, color=Method, shape=Method, y=outCVaR), data=dat.sum) +
 
 ggsave("../../TexDocuments/Figures/priorConvRisk.pdf", 
        g, width=3.25, height=3.25, units="in")
+
+
+#########
+# The new wrong-prior test
+########
+dat = read.csv("Results/randWrongPrior_100_72_8675309.csv")
+head(dat)
+
+##contour plot doesn't like that dist isn't rounded
+#So fit a response surface.
+prior.loess <- loess( CVaR ~ Dist + Scale + Dist*Scale, data = dat)
+dat.prior <- expand.grid(list(Dist=seq(.05, .09, .0025), Scale=seq(.1, 3, .01)))
+dat.prior <- dat.prior %>% mutate(CVaRSooth = as.numeric(predict(prior.loess, dat.prior)))
+prior.loess2 <- loess( outReturn ~ Dist + Scale + Dist*Scale, data = dat)
+dat.prior <- dat.prior %>% mutate(ReturnSmooth = as.numeric(predict(prior.loess2, dat.prior)))
+
+#Figure out how to get labels on the contours...
+##Something seems wrong with the returns....
+ggplot(aes(x=Dist, y=Scale, z=ReturnSmooth), data=dat.prior) +
+  geom_tile(aes(fill=ReturnSmooth)) + stat_contour()
+  
+##where do we get violations?
+dat %>% mutate(Viols = CVaR > 3) %>%
+  group_by(Scale) %>%
+  summarize(probViol = mean(Viols) ) %>%
+  qplot(x=Scale, y=probViol, data=.) + geom_point()
 
 
 

@@ -1,5 +1,8 @@
+###
+# It appears all the actual functions in this module
+# are deprecateds
+###
 module Dir
-
 using Distributions, Roots
 
 include("asymptotics.jl")

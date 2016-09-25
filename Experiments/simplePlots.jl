@@ -1,5 +1,4 @@
-# Asymptotic Plots for Amb Sets Paper
-
+# Asymptotic Plots/Tables
 
 using Distributions
 include("../src/DirRes.jl")
@@ -31,7 +30,6 @@ function table_cov_d_eps()
 		print("\n")
 	end
 end
-
 
 #dumps a file with several random vs
 function plots_in_N(dir_path, path)
@@ -72,12 +70,12 @@ function plots_in_N(dir_path, path)
 	close(fp)
 end
 
+#Creates Fig 1b
 function plot_in_eps(path)
 	eps_grid = linspace(.01, .4, 20)
 	kl_vals = map(Dir.kl_const, eps_grid)
 	mom_vals = map(Dir.chisq_const, eps_grid)
 
-	#not a clever way to do this
 	kl_cov_vals5 = map(eps_ -> Dir.kl_cov_const(eps_, 5), eps_grid)
 	kl_cov_vals10 = map(eps_ -> Dir.kl_cov_const(eps_, 10), eps_grid)
 	kl_cov_vals20 = map(eps_ -> Dir.kl_cov_const(eps_, 20), eps_grid)
@@ -87,7 +85,7 @@ function plot_in_eps(path)
 	close(fp)
 end
 
-# creates a plot
+# Fig 3b
 function comp_eps_kl(path)
 	eps_grid = linspace(.001, .5, 30)
 	fp = open(path, "w")
