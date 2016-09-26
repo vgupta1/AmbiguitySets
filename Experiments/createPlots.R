@@ -15,6 +15,7 @@ font = "Times New Roman"
 #########
 #first create a plot without asymptotic values
 dat = read.csv(file="new_conv_N_plot.csv", header=TRUE)
+dat = read.csv(file="../temp_vals.csv", header=TRUE)
 
 g = ggplot(aes(x=N, y=Ratio, color=Type), 
        data=filter(dat, N>0 & N < 1e4)) + 

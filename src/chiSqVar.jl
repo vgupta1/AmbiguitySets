@@ -1,41 +1,6 @@
 #####
 # Sets based on the ChiSq (2nd Moment)
 #####
-using JuMP, Gurobi
-
-function calc_phat(alphas) 
-	const alpha0 = sum(alphas)
-	alphas/alpha0, alpha0
-end
-
-#Unscaled Sigma is diag(p) - p*pT
-#VG replace this function using kron
-function unscaled_sigma_(phat)
-	const d = length(phat)
-	sigma = zeros(Float64, d, d)
-	for i = 1:d
-		sigma[i, i] = phat[i]*(1-phat[i])
-		for j = i+1:d
-			sigma[i, j] = -phat[i] * phat[j]
-			sigma[j, i] = sigma[i, j]
-		end
-	end
-	sigma
-end
-
-#Finite sample scaling, equiv to assymptotic
-function sigma(alphas)
-	const phat, alpha0 = calc_phat(alphas)
-	unscaled_sigma_(phat)/(alpha0+1)
-end
-
-#Inverse of the unscaled SUBmatrix
-function invsigma_(alphas)
-	phat, alpha0 = calc_phat(alphas)
-	n = length(phat)
-	diagm(1./phat[1:end-1]) + fill(1./phat[end], n-1, n-1)
-end
-
 
 #2 moment VaR bound
 #thresh is either (1/eps -1)/(alpha0 +1) or else Chisq(1-eps)/N
@@ -76,7 +41,7 @@ end
 chiSqVar(vs, alphas, eps_) = chiSqVarSol(vs, alphas, (1/eps_-1)/(sum(alphas)+1))[1]
 
 #VG Change this so it doesn't require N
-function chiSqVarCov(vs, alphas, eps_, N)
+function chiSqVarCov(vs, alphas, eps_, N=sum(alphas))
 	thresh = quantile(Distributions.Chisq(length(alphas)-1), 1-eps_)/N
 	chiSqVarSol(vs, alphas, thresh)[1]
 end

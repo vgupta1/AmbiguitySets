@@ -21,8 +21,7 @@ mkt.melt %>% group_by(variable) %>%
 mkt %>% select(-Date) %>% cor()
 
 ### Increasing N plots
-dat = read.csv("Results/portExp2_72_3.csv")
-dat = read.csv("Results/portExp2a_72_3.csv")
+dat = read.csv("Results/portExp2b_72_3.csv")
 budget = 3
 
 dat.sum<- dat %>% group_by(N, Method) %>%
@@ -35,20 +34,23 @@ dat.sum<- dat %>% group_by(N, Method) %>%
             CVaRUp= quantile(CVaR, .90), 
             CVaRDown=quantile(CVaR, .1), 
             NumZero = mean( X_Norm <= .001), 
-            SDPorts = sd(X_Norm))
+            SDPorts = sd(X_Norm), 
+            numRuns = n())
 
-pos = position_dodge(width=100)
-my.labs <- c(expression(KL), expression(chi^2), expression(KL[C]), expression(chi[C]^2), expression(SAA))
-my.breaks <- c("KL", "Chisq", "KLCov", "ChisqCov", "SAA")
+pos = position_dodge(width=50)
+my.labs <- c(expression(KL), expression(chi^2), expression(KL[C]), expression(chi[C]^2), expression(SAA), 
+             expression(Naive), expression(MinVar))
+my.breaks <- c("KL", "Chisq", "KLCov", "ChisqCov", "SAA", "Naive", "MinVar")
 
 g <- ggplot(aes(x=N, color=Method, y=outPerf, 
-           shape=Method), 
-       data=dat.sum) + 
+           shape=Method), data=dat.sum) + 
     geom_line(aes(linetype=Method), position=pos) + 
   geom_point(position=pos, size=2) + 
     geom_errorbar(aes(ymin=PerfDown, ymax=PerfUp), position=pos) + 
-  theme_bw(base_size=10) + 
-  theme(legend.title=element_blank()) + 
+  theme_minimal(base_size=10) + 
+  theme(legend.title=element_blank(), 
+        legend.direction="horizontal", 
+        legend.position=c(.5, 1)) + 
   ylab("Return (%)")
 
 g <- g + scale_color_discrete(breaks=my.breaks, 
@@ -57,76 +59,23 @@ g <- g + scale_color_discrete(breaks=my.breaks,
                        labels=my.labs) +
   scale_linetype_discrete(breaks = my.breaks, labels=my.labs)
 
-g<- g + theme(legend.position="top", 
+g<- g + theme(legend.direction="horizontal", 
+              legend.position=c(.5, 1), 
               text=element_text(family=font))
 
 ggsave("../../TexDocuments/Figures/portConvInNRet_a.pdf", 
        g, width=3.25, height=3.25, units="in")
 
 
-#### 
-# Temp plot for Engineering
-###
-my.labs <- c(expression(SAA), expression(KL), expression(KL[C]))
-my.breaks <- c("SAA", "KL", "KLCov")
-vals=c("#e41a1c", "#4daf4a", "#4F86FF")
-
-dat.sum <- filter(dat.sum, Method %in% c("SAA", "KL", "KLCov")) %>% 
-  mutate(Method = factor(Method, 
-                         levels=c("SAA", "KL", "KLCov")))
-
-h <- filter(dat.sum, Method %in% c("SAA", "KL")) %>%
-  ggplot(aes(x=N, color=Method, y=outPerf)) + 
-  geom_line(position=pos) + 
-  geom_point(position=pos, size=2) + 
-  geom_errorbar(aes(ymin=PerfDown, ymax=PerfUp), 
-              position=pos, width=30) + 
-  theme_bw(base_size=10) + 
-  theme(legend.title=element_blank()) + 
-  ylab("Return (%)") + 
-  ylim(0, 1.7) + 
-  scale_color_manual(breaks=my.breaks, 
-                     labels=my.labs, 
-                     values=vals) +
-  theme(legend.position=c(.8, .25), 
-              text=element_text(family=font))
-
-ggsave("../../Presentations/USCEngineering_PortSAAKLReturns.pdf", 
-       h, width=3.25, height=3.25, units="in")
-
-h<- filter(dat.sum, Method %in% c("SAA", "KL", "KLCov")) %>%
-  ggplot(aes(x=N, color=Method, y=outCVaR), 
-         data=.) +
-  geom_line(position=pos) + 
-  geom_point(position=pos, size=2) +
-  geom_errorbar(aes(ymin=CVaRDown, ymax=CVaRUp), position=pos, width=30) + 
-  theme_bw(base_size=10) + 
-  theme(legend.title=element_blank(), 
-        text=element_text(family=font), 
-        legend.position=c(.8, .2)) + 
-  ylab("CVaR (%)") +
-  scale_color_manual(breaks=my.breaks, 
-                     labels=my.labs, 
-                     values=vals) +
-  geom_hline(yintercept=3, linetype="dashed") + 
-  ylim(0, 4.7)
-
-ggsave("../../Presentations/USCEngineering_PortAllRisk.pdf", 
-       h, width=3.25, height=3.25, units="in")
-
-
-
-######
-
-
 g<- ggplot(aes(x=N, color=Method, shape=Method, y=outCVaR), data=dat.sum) +
   geom_line(aes(linetype=Method), position=pos) + 
   geom_point(position=pos, size=2) +
   geom_errorbar(aes(ymin=CVaRDown, ymax=CVaRUp), position=pos) + 
-  theme_bw(base_size=10) + 
+  theme_minimal(base_size=10) + 
   theme(legend.title=element_blank(), 
         text=element_text(family=font), 
-        legend.position="top") + 
+        legend.direction="horizontal", 
+        legend.position=c(.5, 1)) + 
   ylab("CVaR (%)") +
   geom_hline(yintercept=3, linetype="dashed")
 
@@ -157,6 +106,13 @@ dat.sum %>%
   select(N, Method, SDPorts) %>%
   dcast(N ~ Method)
 
+
+d1 = dat.sum %>% filter(Method %in% c("ChisqCov", "KLCov")) %>%
+    select(N, Method, NumZero) %>%
+  dcast(N ~ Method)
+d2 = dat.sum %>% 
+  select(N, Method, SDPorts) %>%
+  dcast(N ~ Method)
 
 
 

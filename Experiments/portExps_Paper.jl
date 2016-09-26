@@ -5,14 +5,14 @@ include("../src/DirRes.jl")
 module port
 using Distributions, Gurobi, JuMP, JuMPeR, Dir
 
-
-#createss supp of distribution most recent numPts of KF dataset
+#creates supp of distribution most recent numPts of KF dataset
 function getMktSupp(numPts, path="Data//12_Industry_Portfolios_clean.csv")
 	#load up the data set
 	dat, header = readdlm(path, ',', '\r', header=true)
 	dat[end-numPts+1:end, 2:end]
 end
 
+#Compute the CVaR of each asset in the dataset based on the previous numPts months
 function mktCVars(numPts, eps_=.1, path="Data//12_Industry_Portfolios_clean.csv")
 	dat = getMktSupp(numPts, path)
 	d = size(dat, 1)
@@ -27,9 +27,9 @@ end
 #create N synthetic observations, drawn equally likely from support
 function buildSynthMkt(N, supp)
 	#sample counts
-	#now sample counts from this distribution	
+	#now sample counts from this distribution
 	const d = size(supp, 1)
-	dist = Categorical(ones(d)/d)	
+	dist = Categorical(ones(d)/d)
 	sample = rand(dist, N)
 	cnts = zeros(d)
 	for j = 1:N
@@ -38,24 +38,71 @@ function buildSynthMkt(N, supp)
 	cnts
 end
 
-# this is defunct...  a truly synthetic version
-function buildMkt2(d, N; numAssets=5)
-	#sample supp from an interesting continuous distribution
-	supp = randn(d, numAssets)
-	supp = supp * diagm(linspace(.1, .3, numAssets))
-	supp = broadcast(+, linspace(0, .1, numAssets)', supp)
-
-	#now sample counts from this distribution	
-	dist = Categorical(ones(d)/d)	
-	sample = rand(dist, N)
-	cnts = zeros(d)
-	for j = 1:N
-		cnts[sample[j]] += 1
-	end
-	supp, cnts
+#assess out-of-sample performance
+#return the mean and cvar at eps_
+#VG uses assumption that pstar = 1/N
+function out_perf(x, eps_, supp)
+	d = size(supp, 1)
+	pstar = ones(d)/d
+	rets = supp * x
+	(pstar' * supp * x)[1], Dir.cvar_sort(rets, pstar, eps_)
 end
 
-#CVaR constraint
+# # VG drop this
+# # this is defunct...  a truly synthetic version
+# function buildMkt2(d, N; numAssets=5)
+# 	#sample supp from an interesting continuous distribution
+# 	supp = randn(d, numAssets)
+# 	supp = supp * diagm(linspace(.1, .3, numAssets))
+# 	supp = broadcast(+, linspace(0, .1, numAssets)', supp)
+
+# 	#now sample counts from this distribution	
+# 	dist = Categorical(ones(d)/d)	
+# 	sample = rand(dist, N)
+# 	cnts = zeros(d)
+# 	for j = 1:N
+# 		cnts[sample[j]] += 1
+# 	end
+# 	supp, cnts
+# end
+
+###
+# CVAR-constrained portfolio allocation problems for various methods
+###
+
+#1/N Diversification
+#Rescaled so that CVaR_eps is close to budget
+function naive_port(eps_, budget, supp, counts)
+	d, numAssets = size(supp)
+	phat, alpha0 = Dir.calc_phat(counts)
+	xs = ones(numAssets)
+	cvar = Dir.cvar_sort(supp * xs, phat, eps_)
+	xs /= cvar/budget  #ensures new cvar close to budget
+	phat' * supp * xs, xs
+end
+
+#The minimum variance portfolio
+function min_var_port(eps_, budget, supp, counts)
+	m = Model(solver=GurobiSolver(OutputFlag=false))
+	d, numAssets = size(supp)
+	phat, alpha0 = Dir.calc_phat(counts)
+	sigma = Dir.unscaled_sigma_(phat)
+
+	#M^T Sigma Mkt is the relevant quadratic form
+	Q = supp' * sigma * supp
+
+	@defVar(m, xs[1:numAssets] >= 0)
+	@addConstraint(m, sum(xs) == 1)
+	@setObjective(m, Min, sum{xs[ix]*xs[jx]*Q[ix,jx], ix=1:numAssets, jx=1:numAssets})
+	solve(m)
+	xs = getValue(xs[:])
+
+	#rescale to get CVaR close to budget
+	cvar = Dir.cvar_sort(supp * xs, phat, eps_)
+	xs /= cvar/budget  #ensures new cvar close to budget
+	phat' * supp * xs, xs
+end
+
 function saa_port(eps_, budget, supp, counts)
 	# solve for the SAA portfolio
 	m = Model(solver=GurobiSolver(OutputFlag=false))
@@ -68,7 +115,7 @@ function saa_port(eps_, budget, supp, counts)
 
 	@defVar(m, Beta)
 	@defVar(m, zs[1:d] >= 0)
-	#define CvAr
+	#define CVAR
 	for j=1:d
 		@addConstraint(m, -dot(vec(supp[j, :]), xs[:])  - Beta <= zs[j])
 	end
@@ -126,33 +173,11 @@ function kl_port(eps_, budget, supp, cnts, useCover)
 	getObjectiveValue(m), getValue(xs[:])
 end
 
+####
+# The actual tests
+####
 
-#proxy CVaR by sorting
-function cvar_sort(rets, phat, eps_)
-	inds = sortperm(rets)
-	prob = 0.; 
-	cvar = 0
-	for ix = 1:length(rets)
-		if prob >= eps_
-			break
-		else
-			prob += phat[inds[ix]]
-			cvar += phat[inds[ix]] * rets[inds[ix]]
-		end
-	end
-	-cvar / prob
-end
-
-#assess out-of-sample performance
-#return the mean and cvar at eps_
-#VG uses assumption that pstar = 1/N
-function out_perf(x, eps_, supp)
-	d = size(supp, 1)
-	pstar = ones(d)/d
-	rets = supp * x
-	(pstar' * supp * x)[1], cvar_sort(rets, pstar, eps_)
-end
-
+#Simple test for debugging.
 function test(d, N; budget=.2, seed=nothing)
 	seed != nothing && srand(seed)
 	supp = getMktSupp(d)
@@ -191,10 +216,10 @@ function test(d, N; budget=.2, seed=nothing)
 
 end
 
-
 ## dump some stuff to files to look at plots
 function test2(d, numRuns=100; budget=3, seed=nothing, eps_=.1)
-	f = open("Results/portExp2a_$(d)_$(budget).csv", "w")
+#	f = open("Results/portExp2a_$(d)_$(budget).csv", "w")
+	f = open("Results/portExp2b_$(d)_$(budget).csv", "w")
 	writecsv(f, ["Run" "N" "Method" "inReturn" "outReturn" "CVaR" "X_Norm"])
 	seed != nothing && srand(seed)
 	supp = getMktSupp(d)
@@ -202,31 +227,38 @@ function test2(d, numRuns=100; budget=3, seed=nothing, eps_=.1)
 	for N in 100:100:1000
 		for iSim = 1:numRuns
 			cnts = buildSynthMkt(N, supp)
-			zsaa, xsaa = saa_port(eps_, budget, supp, cnts)
-			zchisq_cov, xchisq_cov = chisq_port(eps_, budget, supp, cnts, true)
-			zchisq, xchisq = chisq_port(eps_, budget, supp, cnts, false)
-			zkl_cov, xkl_cov = kl_port(eps_, budget, supp, cnts, true)
-			zkl, xkl = kl_port(eps_, budget, supp, cnts, false)
 
+			zsaa, xsaa = saa_port(eps_, budget, supp, cnts)
 			outsaa, cvarsaa = out_perf(xsaa, eps_, supp)
 			writecsv(f, [iSim N "SAA" zsaa outsaa cvarsaa norm(xsaa)])
 
+			zchisq, xchisq = chisq_port(eps_, budget, supp, cnts, false)
 			outchisq, cvarchisq = out_perf(xchisq, eps_, supp)
 			writecsv(f, [iSim N "Chisq" zchisq outchisq cvarchisq norm(xchisq)])
 
+			zchisq_cov, xchisq_cov = chisq_port(eps_, budget, supp, cnts, true)
 			out_chi_cov, cvar_chi_cov = out_perf(xchisq_cov, eps_, supp)
 			writecsv(f, [iSim N "ChisqCov" zchisq_cov out_chi_cov cvar_chi_cov norm(xchisq_cov)])
 
+			zkl, xkl = kl_port(eps_, budget, supp, cnts, false)
 			outkl, cvarkl = out_perf(xkl, eps_, supp)
 			writecsv(f, [iSim N "KL" zkl outkl cvarkl norm(xkl)])
 
+			zkl_cov, xkl_cov = kl_port(eps_, budget, supp, cnts, true)
 			outkl_cov, cvarkl_cov = out_perf(xkl_cov, eps_, supp)
 			writecsv(f, [iSim N "KLCov" zkl_cov outkl_cov cvarkl_cov norm(xkl_cov)])
+
+			z_naive, x_naive = naive_port(eps_, budget, supp, cnts)
+			out_naive, cvar_naive = out_perf(x_naive, eps_, supp)
+			writecsv(f, [iSim N "Naive" z_naive out_naive cvar_naive norm(x_naive)])
+
+			z_minvar, x_minvar = min_var_port(eps_, budget, supp, cnts)
+			out_minvar, cvar_minvar = out_perf(x_minvar, eps_, supp)
+			writecsv(f, [iSim N "MinVar" z_minvar out_minvar cvar_minvar norm(x_minvar)])
 		end
 	end
 	close(f)
 end
-
 
 function test_incr_d(N, numRuns; budget=3, eps_=.1, seed=nothing)
 	f = open("Results/incrDExp_a_$(N)_$(budget).csv", "w")
@@ -320,7 +352,6 @@ function test_wrongPriorScale(numRuns; budget=3, d=72, N=300, seed=nothing)
 	end
 	close(f)
 end
-
 
 function test_wrongPriorConv(d, numRuns; budget=3, seed=nothing, scale=20)
 	f = open("Results/randWrongPrior2_$(scale).csv", "w")
@@ -423,5 +454,4 @@ function fullSim(d; budget=3, seed=nothing)
 	close(f)
 end
 
-
-end #moduleBadbad
+end #module

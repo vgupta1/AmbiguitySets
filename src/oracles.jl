@@ -22,7 +22,7 @@ registerConstraint(w::AmbiguitySet, rm::Model, ind::Int, prefs) =
 
 # JuMPeR wants us to generate a constraint for every uncertain constraint in inds
 function generateCut(w::AmbiguitySet, m::Model, rm::Model, inds::Vector{Int}, active=false)
-    new_cons = []
+    new_cons = Any[]
     rd = JuMPeR.getRobust(rm)
     for ind in inds
         con = JuMPeR.get_uncertain_constraint(rm, ind)
@@ -139,11 +139,9 @@ function ChiSqSet(alphas, eps_, useCover=false;
     alpha0 = sum(alphas)
 	if !useCover
         const thresh = (1/eps_ -1)/(alpha0 + 1)
-        println("Size:\t", thresh)
 		ChiSqSet(alphas/alpha0, thresh, debug_printcut, cut_tol)
 	else
 		n = length(alphas)
-        println("Size:\t", quantile(Distributions.Chisq(n-1), 1-eps_)/alpha0)
         ChiSqSet(alphas/alpha0, quantile(Distributions.Chisq(n-1), 1-eps_)/alpha0, 
                 debug_printcut, cut_tol)
 	end

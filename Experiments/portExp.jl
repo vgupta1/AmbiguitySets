@@ -55,22 +55,6 @@ function buildMkt2(d, N; numAssets=5)
 	supp, cnts
 end
 
-#Approximate the CVaR of rets by sorting
-#Only accurate up to discretization error
-function cvar_sort(rets, phat, eps_)
-    inds = sortperm(rets)
-    prob = 0.; 
-    cvar = 0
-    for ix = 1:length(rets)
-        if prob >= eps_
-            break
-        else
-            prob += phat[inds[ix]]
-            cvar += phat[inds[ix]] * rets[inds[ix]]
-        end
-    end
-    -cvar / prob
-end
 
 #Out-of-sample performance of a portfolio
 #Assumes pstar = 1/N
