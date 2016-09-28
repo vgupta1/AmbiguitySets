@@ -3,7 +3,7 @@
 ###
 include("../src/DirRes.jl")
 module port
-using Distributions, Gurobi, JuMP, JuMPeR, Dir
+using Distributions, Gurobi, JuMP, JuMPeR, Dir, Iterators
 
 #creates supp of distribution most recent numPts of KF dataset
 function getMktSupp(numPts, path="Data//12_Industry_Portfolios_clean.csv")
@@ -25,11 +25,14 @@ function mktCVars(numPts, eps_=.1, path="Data//12_Industry_Portfolios_clean.csv"
 end
 
 #create N synthetic observations, drawn equally likely from support
-function buildSynthMkt(N, supp)
+function buildSynthMkt(N, supp, probs=Float64[])
 	#sample counts
 	#now sample counts from this distribution
 	const d = size(supp, 1)
-	dist = Categorical(ones(d)/d)
+	if isempty(probs)
+		probs = ones(d)/d
+	end
+	dist = Categorical(probs)
 	sample = rand(dist, N)
 	cnts = zeros(d)
 	for j = 1:N
@@ -38,33 +41,25 @@ function buildSynthMkt(N, supp)
 	cnts
 end
 
+#get cluster Support and probs
+function clusterMkt(path="Data//ClusterScenarios.csv")
+	dat, header = readcsv(path, header=true)
+	#drop first column from R's weird row naming,1 for cluster name
+	supp = dat[:, 3:end-1]
+	probs= dat[:, end] 
+	supp, probs
+end
+
 #assess out-of-sample performance
 #return the mean and cvar at eps_
-#VG uses assumption that pstar = 1/N
-function out_perf(x, eps_, supp)
+function out_perf(x, eps_, supp, pstar=Float64[])
 	d = size(supp, 1)
-	pstar = ones(d)/d
+	if isempty(pstar)		
+		pstar = ones(d)/d
+	end
 	rets = supp * x
 	(pstar' * supp * x)[1], Dir.cvar_sort(rets, pstar, eps_)
 end
-
-# # VG drop this
-# # this is defunct...  a truly synthetic version
-# function buildMkt2(d, N; numAssets=5)
-# 	#sample supp from an interesting continuous distribution
-# 	supp = randn(d, numAssets)
-# 	supp = supp * diagm(linspace(.1, .3, numAssets))
-# 	supp = broadcast(+, linspace(0, .1, numAssets)', supp)
-
-# 	#now sample counts from this distribution	
-# 	dist = Categorical(ones(d)/d)	
-# 	sample = rand(dist, N)
-# 	cnts = zeros(d)
-# 	for j = 1:N
-# 		cnts[sample[j]] += 1
-# 	end
-# 	supp, cnts
-# end
 
 ###
 # CVAR-constrained portfolio allocation problems for various methods
@@ -72,34 +67,41 @@ end
 
 #1/N Diversification
 #Rescaled so that CVaR_eps is close to budget
+#if budget < 0, no scaling
 function naive_port(eps_, budget, supp, counts)
 	d, numAssets = size(supp)
 	phat, alpha0 = Dir.calc_phat(counts)
 	xs = ones(numAssets)
-	cvar = Dir.cvar_sort(supp * xs, phat, eps_)
-	xs /= cvar/budget  #ensures new cvar close to budget
+	if budget > 0 
+		cvar = Dir.cvar_sort(supp * xs, phat, eps_)
+		##VG Sanity check to be removed
+		@assert cvar >= budget 
+		xs /= cvar/budget  #ensures new cvar close to budget
+	end
 	phat' * supp * xs, xs
 end
 
 #The minimum variance portfolio
+#If budget < 0, no scaling of CVAR
 function min_var_port(eps_, budget, supp, counts)
 	m = Model(solver=GurobiSolver(OutputFlag=false))
 	d, numAssets = size(supp)
 	phat, alpha0 = Dir.calc_phat(counts)
-	sigma = Dir.unscaled_sigma_(phat)
-
-	#M^T Sigma Mkt is the relevant quadratic form
-	Q = supp' * sigma * supp
 
 	@defVar(m, xs[1:numAssets] >= 0)
 	@addConstraint(m, sum(xs) == 1)
-	@setObjective(m, Min, sum{xs[ix]*xs[jx]*Q[ix,jx], ix=1:numAssets, jx=1:numAssets})
+	@defVar(m, mu)
+	@setObjective(m, Min, sum{phat[ix]*(dot(vec(supp[ix, :]), xs) - mu)^2, ix = 1:d})
 	solve(m)
 	xs = getValue(xs[:])
 
 	#rescale to get CVaR close to budget
-	cvar = Dir.cvar_sort(supp * xs, phat, eps_)
-	xs /= cvar/budget  #ensures new cvar close to budget
+	if budget > 0
+		cvar = Dir.cvar_sort(supp * xs, phat, eps_)
+		##VG Sanity check to be removed
+		@assert cvar >= budget 
+		xs /= cvar/budget  #ensures new cvar close to budget
+	end
 	phat' * supp * xs, xs
 end
 
@@ -180,8 +182,11 @@ end
 #Simple test for debugging.
 function test(d, N; budget=.2, seed=nothing)
 	seed != nothing && srand(seed)
-	supp = getMktSupp(d)
-	cnts = buildSynthMkt(N, supp)
+	#supp = getMktSupp(d)
+	#cnts = buildSynthMkt(N, supp)
+
+	supp, probs = clusterMkt()
+	cnts = buildSynthMkt(N, supp, probs)
 
 	zsaa, xsaa = saa_port(.1, budget, supp, cnts)
 	zchisq, xchisq = chisq_port(.1, budget, supp, cnts, false)
@@ -216,9 +221,8 @@ function test(d, N; budget=.2, seed=nothing)
 
 end
 
-## dump some stuff to files to look at plots
-function test2(d, numRuns=100; budget=3, seed=nothing, eps_=.1)
-#	f = open("Results/portExp2a_$(d)_$(budget).csv", "w")
+# Generates data for plots for dependence in N plots
+function test2(d=72, numRuns=1000; budget=3, seed=nothing, eps_=.1)
 	f = open("Results/portExp2b_$(d)_$(budget).csv", "w")
 	writecsv(f, ["Run" "N" "Method" "inReturn" "outReturn" "CVaR" "X_Norm"])
 	seed != nothing && srand(seed)
@@ -260,7 +264,51 @@ function test2(d, numRuns=100; budget=3, seed=nothing, eps_=.1)
 	close(f)
 end
 
-function test_incr_d(N, numRuns; budget=3, eps_=.1, seed=nothing)
+## Generates the dependence in N, synthetic cluster-based market
+function test3(numRuns=100; budget=3, seed=nothing, eps_=.1)
+	f = open("Results/portExp3_$(budget).csv", "w")
+	writecsv(f, ["Run" "N" "Method" "inReturn" "outReturn" "CVaR" "X_Norm"])
+	seed != nothing && srand(seed)
+	supp, probs = clusterMkt()
+
+	for N in 100:100:1000
+		for iSim = 1:numRuns
+			cnts = buildSynthMkt(N, supp, probs)
+
+			zsaa, xsaa = saa_port(eps_, budget, supp, cnts)
+			outsaa, cvarsaa = out_perf(xsaa, eps_, supp, probs)
+			writecsv(f, [iSim N "SAA" zsaa outsaa cvarsaa norm(xsaa)])
+
+			zchisq, xchisq = chisq_port(eps_, budget, supp, cnts, false)
+			outchisq, cvarchisq = out_perf(xchisq, eps_, supp, probs)
+			writecsv(f, [iSim N "Chisq" zchisq outchisq cvarchisq norm(xchisq)])
+
+			zchisq_cov, xchisq_cov = chisq_port(eps_, budget, supp, cnts, true)
+			out_chi_cov, cvar_chi_cov = out_perf(xchisq_cov, eps_, supp, probs)
+			writecsv(f, [iSim N "ChisqCov" zchisq_cov out_chi_cov cvar_chi_cov norm(xchisq_cov)])
+
+			zkl, xkl = kl_port(eps_, budget, supp, cnts, false)
+			outkl, cvarkl = out_perf(xkl, eps_, supp, probs)
+			writecsv(f, [iSim N "KL" zkl outkl cvarkl norm(xkl)])
+
+			zkl_cov, xkl_cov = kl_port(eps_, budget, supp, cnts, true)
+			outkl_cov, cvarkl_cov = out_perf(xkl_cov, eps_, supp, probs)
+			writecsv(f, [iSim N "KLCov" zkl_cov outkl_cov cvarkl_cov norm(xkl_cov)])
+
+			z_naive, x_naive = naive_port(eps_, budget, supp, cnts)
+			out_naive, cvar_naive = out_perf(x_naive, eps_, supp, probs)
+			writecsv(f, [iSim N "Naive" z_naive out_naive cvar_naive norm(x_naive)])
+
+			z_minvar, x_minvar = min_var_port(eps_, budget, supp, cnts)
+			out_minvar, cvar_minvar = out_perf(x_minvar, eps_, supp, probs)
+			writecsv(f, [iSim N "MinVar" z_minvar out_minvar cvar_minvar norm(x_minvar)])
+		end
+	end
+	close(f)
+end
+
+#Creates the Dependence in D plots for N = 300 and N = 700  
+function test_incr_d(; N=300, numRuns=1000, budget=3, eps_=.1, seed=nothing)
 	f = open("Results/incrDExp_a_$(N)_$(budget).csv", "w")
 	writecsv(f, ["Run" "d" "Method" "inReturn" "outReturn" "CVaR"])
 	seed != nothing && srand(seed)
@@ -270,25 +318,32 @@ function test_incr_d(N, numRuns; budget=3, eps_=.1, seed=nothing)
 		for iSim = 1:numRuns
 			cnts = buildSynthMkt(N, supp)
 			zsaa, xsaa = saa_port(eps_, budget, supp, cnts)
-			zchisq_cov, xchisq_cov = chisq_port(eps_, budget, supp, cnts, true)
-			zchisq, xchisq = chisq_port(eps_, budget, supp, cnts, false)
-			zkl_cov, xkl_cov = kl_port(eps_, budget, supp, cnts, true)
-			zkl, xkl = kl_port(eps_, budget, supp, cnts, false)
-
 			outsaa, cvarsaa = out_perf(xsaa, eps_, supp)
 			writecsv(f, [iSim numPts "SAA" zsaa outsaa cvarsaa])
 
+			zchisq, xchisq = chisq_port(eps_, budget, supp, cnts, false)
 			outchisq, cvarchisq = out_perf(xchisq, eps_, supp)
 			writecsv(f, [iSim numPts "Chisq" zchisq outchisq cvarchisq])
 
+			zchisq_cov, xchisq_cov = chisq_port(eps_, budget, supp, cnts, true)
 			out_chi_cov, cvar_chi_cov = out_perf(xchisq_cov, eps_, supp)
 			writecsv(f, [iSim numPts "ChisqCov" zchisq_cov out_chi_cov cvar_chi_cov])
 
+			zkl, xkl = kl_port(eps_, budget, supp, cnts, false)
 			outkl, cvarkl = out_perf(xkl, eps_, supp)
 			writecsv(f, [iSim numPts "KL" zkl outkl cvarkl])
 
+			zkl_cov, xkl_cov = kl_port(eps_, budget, supp, cnts, true)
 			outkl_cov, cvarkl_cov = out_perf(xkl_cov, eps_, supp)
 			writecsv(f, [iSim numPts "KLCov" zkl_cov outkl_cov cvarkl_cov])
+
+			z_minvar, x_minvar = min_var_port(eps_, budget, supp, cnts)
+			out_minvar, cvar_minvar = out_perf(x_minvar, eps_, supp)
+			writecsv(f, [iSim numPts "MinVar" z_minvar out_minvar cvar_minvar])
+
+			z_naive, x_naive = naive_port(eps_, budget, supp, cnts)
+			out_naive, cvar_naive = out_perf(x_naive, eps_, supp)
+			writecsv(f, [iSim numPts "Naive" z_naive out_naive cvar_naive])
 		end
 	end
 	close(f)
@@ -394,7 +449,59 @@ function test_wrongPriorConv(d, numRuns; budget=3, seed=nothing, scale=20)
 	close(f)
 end
 
-function fullSim(d; budget=3, seed=nothing)
+#randomly generate priors and then assess their performance
+function randomWrongPriors(d; numSims=100, numPriors=100, budget=3, eps_ = .1, 
+							seed=8675309, path = "Results/random_wrong_priors",
+							strengths = [.1, .25, .5, .75, 1.], 
+							N_grid = [100, 200, 300])
+	srand(seed)
+	f = open("$(path)_$(d)_$(budget).csv", "w")
+	writecsv(f, ["iPrior" "iSim" "N" "relProb" "MSE" "Method" "outReturn" "outCVaR"])
+	const pstar = ones(d)/d
+	supp = getMktSupp(d)
+
+	#Generate priors uniformly on the simplex with strength given by N
+	prior_generator = Dirichlet(ones(d))
+
+	#Compute the full information optimum for comparison
+	ret_full, x_full = saa_port(eps_, budget, supp, pstar)
+	println("Full Info Optimal: \t", ret_full, "\t", x_full')
+
+	for (N, strength) in product(N_grid, strengths)
+		tau0 = int(N * strength)
+		for iPrior = 1:numPriors
+			taus = rand(prior_generator) * tau0
+			prior = Dirichlet(taus)
+			mode = (taus - 1)/(sum(taus) - d)
+			# println("Min/Max:\t", minimum(taus), "\t", maximum(taus))
+			# println("Mode:\t", minimum(mode), "\t", maximum(mode))
+			#calc the distances
+			mu = mean(prior)
+			relProb = pdf(prior, pstar) / pdf(prior, mu)
+			MSE = norm(mu - pstar)^2 + sum(var(prior))
+
+			t = tic()
+			for iSim = 1:numSims
+				#generate some data
+				cnts = buildSynthMkt(N, supp)
+
+				#Form portfolio with prior and record
+				zchisq, xchisq = chisq_port(eps_, budget, supp, cnts + taus, false)			
+				ret_chisq, cvar_chisq = out_perf(xchisq, eps_, supp)
+				writecsv(f, [iPrior iSim N relProb MSE "ChiSq" ret_chisq cvar_chisq])
+	
+				zkl, xkl = kl_port(eps_, budget, supp, cnts + taus, false)			
+				ret_kl, cvar_kl = out_perf(xkl, eps_, supp)
+				writecsv(f, [iPrior iSim N relProb MSE "KL" ret_kl cvar_kl])
+			end
+			toc()
+		end #end priors loop
+		flush(f)
+	end
+	close(f)
+end
+
+function fullSim(d; budget=4, seed=nothing)
 	f = open("Results/real_sim_$(d)_$(budget).csv", "w")
 	writecsv(f, ["ix" "Method" "inReturn" "outReturn"])
 	seed != nothing && srand(seed)
@@ -403,33 +510,56 @@ function fullSim(d; budget=3, seed=nothing)
 	mkt = getMktSupp(T)
 	cnts = ones(d)
 
-	turnover = zeros(Float64, 5)
+	turnover = zeros(Float64, 9)
 	prev_saa = Float64[]
 	prev_chisq = Float64[]
 	prev_kl = Float64[]
 	prev_chisq_cov = Float64[]
 	prev_kl_cov = Float64[]
+	prev_naive = Float64[]
+	prev_minvar = Float64[]
+	prev_naive_unsc = Float64[]
+	prev_minvar_unsc = Float64[]
 
 	for ix = d:T-1
 		supp = mkt[(ix-d+1):ix, :]
 
 		zsaa, xsaa = saa_port(eps_, budget, supp, cnts)
-		zchisq_cov, xchisq_cov = chisq_port(eps_, budget, supp, cnts, true)
-		zchisq, xchisq = chisq_port(eps_, budget, supp, cnts, false)
-		zkl_cov, xkl_cov = kl_port(eps_, budget, supp, cnts, true)
-		zkl, xkl = kl_port(eps_, budget, supp, cnts, false)
-
 		outsaa =dot(vec(mkt[ix+1, :]), xsaa)
+
+		zchisq, xchisq = chisq_port(eps_, budget, supp, cnts, false)
 		outchisq = dot(vec(mkt[ix+1, :]), xchisq)
-		outchisq_cov = dot(vec(mkt[ix+1, :]), xchisq_cov)
+
+		zkl, xkl = kl_port(eps_, budget, supp, cnts, false)
 		outkl = dot(vec(mkt[ix+1, :]), xkl)
+
+		zchisq_cov, xchisq_cov = chisq_port(eps_, budget, supp, cnts, true)
+		outchisq_cov = dot(vec(mkt[ix+1, :]), xchisq_cov)
+
+		zkl_cov, xkl_cov = kl_port(eps_, budget, supp, cnts, true)
 		outkl_cov = dot(vec(mkt[ix+1, :]), xkl_cov)
+
+		z_naive, x_naive = naive_port(eps_, budget, supp, cnts)
+		out_naive = dot(vec(mkt[ix+1, :]), x_naive)
+
+		z_naive_unsc, x_naive_unsc = naive_port(eps_, -1, supp, cnts)
+		out_naive_unsc = dot(vec(mkt[ix+1, :]), x_naive_unsc)
+
+		z_minvar, x_minvar = min_var_port(eps_, budget, supp, cnts)
+		out_minvar = dot(vec(mkt[ix+1, :]), x_minvar)
+
+		z_minvar_usc, x_minvar_unsc = min_var_port(eps_, -1, supp, cnts)
+		out_minvar_unsc = dot(vec(mkt[ix+1, :]), x_minvar_unsc)
 
 		writecsv(f, [ix "SAA" zsaa outsaa])
 		writecsv(f, [ix "Chisq" zchisq outchisq])
 		writecsv(f, [ix "ChisqCov" zchisq_cov outchisq_cov])
 		writecsv(f, [ix "KL" zkl outkl])
 		writecsv(f, [ix "KLCov" zkl_cov outkl_cov])
+		writecsv(f, [ix "Naive" z_naive out_naive])
+		writecsv(f, [ix "NaiveUnsc" z_naive_unsc out_naive_unsc])
+		writecsv(f, [ix "MinVar" z_minvar out_minvar])
+		writecsv(f, [ix "MinVarUnsc" z_minvar_usc out_minvar_unsc])
 
 		if ix > d
 			turnover[1] += norm(xsaa - prev_saa, 1)
@@ -437,18 +567,26 @@ function fullSim(d; budget=3, seed=nothing)
 			turnover[3] += norm(xkl - prev_kl, 1)
 			turnover[4] += norm(xchisq_cov - prev_chisq_cov, 1)
 			turnover[5] += norm(xkl_cov - prev_kl_cov, 1)
+			turnover[6] += norm(x_naive - prev_naive, 1)
+			turnover[7] += norm(x_minvar - prev_minvar, 1)			
+			turnover[8] += norm(x_naive_unsc - prev_naive_unsc, 1)
+			turnover[9] += norm(x_minvar_unsc - prev_minvar_unsc, 1)
 		end
 		prev_saa = xsaa
 		prev_chisq = xchisq
 		prev_kl = xkl
 		prev_chisq_cov = xchisq_cov
 		prev_kl_cov = xkl_cov
+		prev_naive = x_naive
+		prev_naive_unsc = x_naive_unsc
+		prev_minvar = x_minvar
+		prev_minvar_unsc = x_minvar_unsc
 	end
 
 	#rescale the turnovers
 	turnover /= (T-d-1)
 	println("Turnover:")
-	show( [["SAA", "ChiSq", "KL", "Chisq_cov", "KL_cov"] turnover] )
+	show( [["SAA", "ChiSq", "KL", "Chisq_cov", "KL_cov", "Naive", "MinVar", "NaiveUnsc", "MinVarUnsc"] turnover] )
 	println()
 
 	close(f)
