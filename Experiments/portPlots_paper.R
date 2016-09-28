@@ -150,7 +150,7 @@ dat.sum<- dat %>% group_by(d, Method) %>%
             CVaRUp= quantile(CVaR, .90), 
             CVaRDown=quantile(CVaR, .1))
 
-convInDPlot <- function(dat, yval, yvaldown, yvalup){
+convInDPlot <- function(dat, yval, yvaldown, yvalup,  ylabel){
   pos = position_dodge(width=10)
   g <- ggplot(aes_string(x="d", color="Method", y=yval, 
                   shape="Method", ymin=yvaldown, ymax=yvalup), 
@@ -162,7 +162,7 @@ convInDPlot <- function(dat, yval, yvaldown, yvalup){
     theme(legend.title=element_blank(), 
           legend.position="top", 
           text=element_text(family=font)) + 
-    ylab("Return (%)") 
+    ylab(ylabel) 
   g <- g + scale_color_discrete(breaks=my.breaks, 
                                 labels=my.labs) + 
     scale_shape_discrete(breaks=my.breaks, 
@@ -172,61 +172,27 @@ convInDPlot <- function(dat, yval, yvaldown, yvalup){
 }
 
 #first do one with everyone for the appendix.  These an be big
-g <- convInDPlot(dat.sum, "outPerf", "PerfDown", "PerfUp")
+g <- convInDPlot(dat.sum, "outPerf", "PerfDown", "PerfUp", "Return (%)")
 ggsave("../../TexDocuments/Figures/portConvInDRet_300_full.pdf", 
        g, width=6.5, height=3.25, units="in")
 
-g <- convInDPlot(dat.sum, "outCVaR", "CVaRDown", "CVaRUp")
+g <- convInDPlot(dat.sum, "outCVaR", "CVaRDown", "CVaRUp", "CVaR (%)")
 ggsave("../../TexDocuments/Figures/portConvInDRisk_300_full.pdf", 
        g, width=6.5, height=3.25, units="in")
 
 #now limit down to interesting things for main text.  Should be smaller.
 g <- dat.sum %>% filter(!Method %in% c("Naive", "MinVar")) %>%
-  convInDPlot(., "outPerf", "PerfDown", "PerfUp")
+  convInDPlot(., "outPerf", "PerfDown", "PerfUp", "Return (%)")
 g <- g + theme(legend.position = c(.7, .8)) + 
     guides(col=guide_legend(ncol=2))
 ggsave("../../TexDocuments/Figures/portConvInDRet_300.pdf", 
        g, width=3.25, height=3.25, units="in")
 
 g <- dat.sum %>% filter(!Method %in% c("Naive", "MinVar")) %>%
-  convInDPlot(., "outCVaR", "CVaRDown", "CVaRUp")
-g <- g + theme(legend.position = c(.8, .3)) + 
+  convInDPlot(., "outCVaR", "CVaRDown", "CVaRUp", "CVaR (%)")
+g <- g + theme(legend.position = c(.75, .3)) + 
   guides(col=guide_legend(ncol=2))
 ggsave("../../TexDocuments/Figures/portConvInDRisk_300.pdf", 
-       g, width=3.25, height=3.25, units="in")
-
-
-
-
-
-
-##now do another dropping some of the methods
-
-ggsave("../../TexDocuments/Figures/portConvInDRet_700_a.pdf", 
-       g, width=3.25, height=3.25, units="in")
-
-
-
-
-g<- ggplot(aes(x=d, color=Method, shape=Method, y=outCVaR), data=dat.sum) +
-  geom_line(aes(linetype=Method), position=pos) + 
-  geom_point(position=pos, size=2) +
-  geom_errorbar(aes(ymin=CVaRDown, ymax=CVaRUp), position=pos) + 
-  theme_minimal(base_size=10) + 
-  theme(legend.title=element_blank(), 
-        text=element_text(family=font), 
-        legend.position="top") + 
-  ylab("CVaR (%)") +
-  geom_hline(yintercept=3, linetype="dashed")
-
-g <- g + scale_color_discrete(breaks=my.breaks, 
-                              labels=my.labs) + 
-  scale_shape_discrete(breaks=my.breaks, 
-                       labels=my.labs) +
-  scale_linetype_discrete(breaks = my.breaks, labels=my.labs)
-
-
-ggsave("../../TexDocuments/Figures/portConvInDRisk_700_a.pdf", 
        g, width=3.25, height=3.25, units="in")
 
 #################
