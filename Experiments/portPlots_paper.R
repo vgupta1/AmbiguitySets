@@ -7,11 +7,11 @@ library(dplyr)
 library(extrafont) #for latex fonts
 library(reshape2)
 font = "Times New Roman"
-
+font = "CM Roman"
 
 ### Messing around with the data
-setwd("./Documents/Research/BayesDRO/AmbiguitySets/Experiments/")
-mkt = read.csv(file = "12_Industry_Portfolios_clean.csv")
+setwd("~/Documents/Research/BayesDRO/AmbiguitySets/Experiments/")
+mkt = read.csv(file = "Data/12_Industry_Portfolios_clean.csv")
 mkt.melt = melt(mkt, id.vars = "Date")
 
 mkt.melt %>% group_by(variable) %>% 
@@ -22,6 +22,7 @@ mkt %>% select(-Date) %>% cor()
 
 ### Increasing N plots
 dat = read.csv("Results/portExp2b_72_3.csv")
+dat = read.csv("Results/portExp3_3.csv")
 budget = 3
 
 dat.sum<- dat %>% group_by(N, Method) %>%
@@ -59,12 +60,21 @@ g <- g + scale_color_discrete(breaks=my.breaks,
                        labels=my.labs) +
   scale_linetype_discrete(breaks = my.breaks, labels=my.labs)
 
-g<- g + theme(legend.direction="horizontal", 
-              legend.position=c(.5, 1), 
-              text=element_text(family=font))
+# g<- g + theme(legend.direction="horizontal", 
+#               legend.position=c(.7, .25), 
+#               text=element_text(family=font)) + 
+#         guides(col=guide_legend(ncol=2))
+# 
+# ggsave("../../TexDocuments/Figures/portConvInNRet_a.pdf", 
+#        g, width=3.25, height=3.25, units="in")
 
-ggsave("../../TexDocuments/Figures/portConvInNRet_a.pdf", 
+g<- g + theme(legend.direction="horizontal", 
+              legend.position=c(.5, .95), 
+              text=element_text(family=font)) + 
+        guides(col=guide_legend(nrow=2))
+ggsave("../../TexDocuments/Figures/portConvInNRet_b.pdf", 
        g, width=3.25, height=3.25, units="in")
+
 
 
 g<- ggplot(aes(x=N, color=Method, shape=Method, y=outCVaR), data=dat.sum) +
@@ -75,7 +85,7 @@ g<- ggplot(aes(x=N, color=Method, shape=Method, y=outCVaR), data=dat.sum) +
   theme(legend.title=element_blank(), 
         text=element_text(family=font), 
         legend.direction="horizontal", 
-        legend.position=c(.5, 1)) + 
+        legend.position=c(.7, .25)) + 
   ylab("CVaR (%)") +
   geom_hline(yintercept=3, linetype="dashed")
 
@@ -83,11 +93,21 @@ g <- g + scale_color_discrete(breaks=my.breaks,
                               labels=my.labs) + 
   scale_shape_discrete(breaks=my.breaks, 
                        labels=my.labs) +
-  scale_linetype_discrete(breaks = my.breaks, labels=my.labs)
+  scale_linetype_discrete(breaks = my.breaks, 
+                          labels=my.labs)  
 
+# g <- g + guides(col=guide_legend(ncol=2))
+# 
+# ggsave("../../TexDocuments/Figures/portConvInNRisk_a.pdf", 
+#        g, width=3.25, height=3.25, units="in")
 
-ggsave("../../TexDocuments/Figures/portConvInNRisk_a.pdf", 
+g <- g + theme(legend.position = c(.5, .95))+
+      guides(col=guide_legend(nrow=2))
+ggsave("../../TexDocuments/Figures/portConvInNRisk_b.pdf", 
        g, width=3.25, height=3.25, units="in")
+
+
+
 
 dat.sum %>% filter(N > 750) %>%
   select(N, Method, exceed)
@@ -115,10 +135,6 @@ d2 = dat.sum %>%
   dcast(N ~ Method)
 
 
-
-
-
-
 ########
 # Increasing d plots
 dat = read.csv("Results/incrDExp_a_300_3.csv")
@@ -134,34 +150,69 @@ dat.sum<- dat %>% group_by(d, Method) %>%
             CVaRUp= quantile(CVaR, .90), 
             CVaRDown=quantile(CVaR, .1))
 
-pos = position_dodge(width=10)
-g <- ggplot(aes(x=d, color=Method, y=outPerf, 
-                shape=Method), 
-            data=dat.sum) + 
-  geom_line(aes(linetype=Method), position=pos) + 
-  geom_point(position=pos, size=2) + 
-  geom_errorbar(aes(ymin=PerfDown, ymax=PerfUp), position=pos) + 
-  theme_bw(base_size=10) + 
-  theme(legend.title=element_blank(), 
-        legend.position="top", 
-        text=element_text(family=font)) + 
-  ylab("Return (%)")
+convInDPlot <- function(dat, yval, yvaldown, yvalup){
+  pos = position_dodge(width=10)
+  g <- ggplot(aes_string(x="d", color="Method", y=yval, 
+                  shape="Method", ymin=yvaldown, ymax=yvalup), 
+              data=dat) + 
+    geom_line(aes(linetype=Method), position=pos) + 
+    geom_point(position=pos, size=2) + 
+    geom_errorbar(position=pos) + 
+    theme_minimal(base_size=10) + 
+    theme(legend.title=element_blank(), 
+          legend.position="top", 
+          text=element_text(family=font)) + 
+    ylab("Return (%)") 
+  g <- g + scale_color_discrete(breaks=my.breaks, 
+                                labels=my.labs) + 
+    scale_shape_discrete(breaks=my.breaks, 
+                         labels=my.labs) +
+    scale_linetype_discrete(breaks = my.breaks, labels=my.labs)
+  return(g)
+}
 
-g <- g + scale_color_discrete(breaks=my.breaks, 
-                              labels=my.labs) + 
-  scale_shape_discrete(breaks=my.breaks, 
-                       labels=my.labs) +
-  scale_linetype_discrete(breaks = my.breaks, labels=my.labs)
+#first do one with everyone for the appendix.  These an be big
+g <- convInDPlot(dat.sum, "outPerf", "PerfDown", "PerfUp")
+ggsave("../../TexDocuments/Figures/portConvInDRet_300_full.pdf", 
+       g, width=6.5, height=3.25, units="in")
+
+g <- convInDPlot(dat.sum, "outCVaR", "CVaRDown", "CVaRUp")
+ggsave("../../TexDocuments/Figures/portConvInDRisk_300_full.pdf", 
+       g, width=6.5, height=3.25, units="in")
+
+#now limit down to interesting things for main text.  Should be smaller.
+g <- dat.sum %>% filter(!Method %in% c("Naive", "MinVar")) %>%
+  convInDPlot(., "outPerf", "PerfDown", "PerfUp")
+g <- g + theme(legend.position = c(.7, .8)) + 
+    guides(col=guide_legend(ncol=2))
+ggsave("../../TexDocuments/Figures/portConvInDRet_300.pdf", 
+       g, width=3.25, height=3.25, units="in")
+
+g <- dat.sum %>% filter(!Method %in% c("Naive", "MinVar")) %>%
+  convInDPlot(., "outCVaR", "CVaRDown", "CVaRUp")
+g <- g + theme(legend.position = c(.8, .3)) + 
+  guides(col=guide_legend(ncol=2))
+ggsave("../../TexDocuments/Figures/portConvInDRisk_300.pdf", 
+       g, width=3.25, height=3.25, units="in")
+
+
+
+
+
+
+##now do another dropping some of the methods
 
 ggsave("../../TexDocuments/Figures/portConvInDRet_700_a.pdf", 
        g, width=3.25, height=3.25, units="in")
+
+
 
 
 g<- ggplot(aes(x=d, color=Method, shape=Method, y=outCVaR), data=dat.sum) +
   geom_line(aes(linetype=Method), position=pos) + 
   geom_point(position=pos, size=2) +
   geom_errorbar(aes(ymin=CVaRDown, ymax=CVaRUp), position=pos) + 
-  theme_bw(base_size=10) + 
+  theme_minimal(base_size=10) + 
   theme(legend.title=element_blank(), 
         text=element_text(family=font), 
         legend.position="top") + 
@@ -198,7 +249,7 @@ g <- ggplot(aes(x=N, color=Method, y=outPerf, shape=Method),
   geom_line(aes(linetype=Method), position=pos) + 
   geom_point(position=pos, size=2) + 
   geom_errorbar(aes(ymin=PerfDown, ymax=PerfUp), position=pos) + 
-  theme_bw(base_size=10) + 
+  theme_minimal(base_size=10) + 
   theme(legend.title=element_blank(), 
         legend.position="top", 
         text=element_text(family=font)) + 
@@ -211,7 +262,7 @@ g<- ggplot(aes(x=N, color=Method, shape=Method, y=outCVaR), data=dat.sum) +
   geom_line(aes(linetype=Method), position=pos) + 
   geom_point(position=pos, size=2) +
   geom_errorbar(aes(ymin=CVaRDown, ymax=CVaRUp), position=pos) + 
-  theme_bw(base_size=10) + 
+  theme_minimal(base_size=10) + 
   theme(legend.title=element_blank(), 
         text=element_text(family=font), 
         legend.position="top") + 
@@ -253,25 +304,28 @@ dat %>% mutate(Viols = CVaR > 3) %>%
 #############
 # the full sim
 #####
-myfun <- function(t){quantile(t, .05)}
+myfun <- function(t){-quantile(t, .05)}
 
-dat = read.csv("Results/real_sim_36_4.csv")
-dat %>% group_by(Method) %>%
+dat = read.csv("Results/real_sim_36_6.csv")
+dat %>% filter(!Method %in% c("NaiveUnsc", "MinVarUnsc")) %>%
+  group_by(Method) %>%
   select(-ix, -inReturn) %>%
-  summarise_each(funs(mean, sd, myfun))
+  summarise_each(funs(mean, sd, myfun)) %>%
+  mutate(ratio = mean/myfun) %>%
+  arrange(ratio)
 
 ## dump for julia to do the cvar calc
-dcast(dat, ix ~Method, value=outReturn) %>% 
+dcast(dat, ix ~Method, value.var="outReturn") %>% 
   write.csv("Results/temp_out.csv")
 
-dat %>% filter(Method %in% c("Chisq", "KL", "SAA")) %>%
-ggplot(aes(x=outReturn, group=Method, fill=Method)) + 
-  geom_histogram(aes(y=..density..)) + 
-  facet_grid(Method~.) + 
+dat %>% filter(Method %in% c("Chisq", "KL", "Naive", "MinVar")) %>%
+ggplot(aes(x=outReturn, group=Method, color=Method, linetype=Method)) + 
+  geom_density() + 
   ylab("") + 
   xlab("Return (%)") +
-  theme_bw(base_size=10) + 
-  theme(legend.position="none")
+  theme_minimal(base_size=10) + 
+  theme(legend.position=c(.3, .8), 
+        legend.title=element_blank())
 
 dat %>% filter(Method %in% c("Chisq", "KL", "SAA")) %>%
 ggplot(aes(x=inReturn, y=outReturn, color=Method)) + 
@@ -287,7 +341,7 @@ dat %>% mutate(diff = outReturn - inReturn) %>%
   ggplot(aes(x=diff, group=Method, fill=Method)) + 
   geom_histogram() + 
   facet_grid(Method~.) + 
-  theme_bw(base_size=10) + 
+  theme_minimal(base_size=10) + 
   theme(legend.position="none")
 
 ### plot smoothed returns just to see what's happening
@@ -297,11 +351,11 @@ dat <- dat %>%
          Date2 = as.Date(paste(Date, "01", sep=""), "%Y%m%d"))
   
 g<- dat %>% group_by(Method) %>%
-  filter(Method %in% c("KL", "Chisq", "SAA")) %>%
+  filter(!Method %in% c("NaiveUnsc", "MinVarUnsc")) %>%
   mutate(cumReturn = cumprod(1 + .01 * outReturn)) %>%
   ggplot(aes(x=Date2, y=cumReturn, 
            color=Method, group=Method)) + 
-  geom_line(aes(linetype=Method)) + theme_bw(base_size=10) + 
+  geom_line(aes(linetype=Method)) + theme_minimal(base_size=10) + 
   theme(legend.position = c(.2, .8), 
         text=element_text(family=font), 
         legend.title=element_blank()) +
@@ -338,7 +392,7 @@ g <- ggplot(aes(x=Scale, y=outPerf),
   geom_line() + 
   geom_point(size=2) + 
   geom_errorbar(aes(ymin=PerfDown, ymax=PerfUp)) + 
-  theme_bw(base_size=10) + 
+  theme_minimal(base_size=10) + 
   theme(legend.title=element_blank(), 
         legend.position="top", 
         text=element_text(family=font)) + 
@@ -352,7 +406,7 @@ g<- ggplot(aes(x=Scale, y=outCVaR), data=dat.sum) +
   geom_line() + 
   geom_point(size=2) +
   geom_errorbar(aes(ymin=CVaRDown, ymax=CVaRUp)) + 
-  theme_bw(base_size=10) + 
+  theme_minimal(base_size=10) + 
   theme(legend.title=element_blank(), 
         text=element_text(family=font), 
         legend.position="top") + 
@@ -363,4 +417,37 @@ g<- ggplot(aes(x=Scale, y=outCVaR), data=dat.sum) +
 ggsave("../../TexDocuments/Figures/scalePriorRisk.pdf", 
        g, width=3.25, height=3.25, units="in")
 
+####
+# clustering analysis
+###
+head(mkt)
+T = 120
+mkt_small = mkt[(1062-T+1):1062, 2:13])
+t = hclust(dist(mkt_small)
+plot(t)
+t_cut <- cutree(t, 36)
+
+mkt_small$cluster = t_cut
+
+g <- mkt_small %>% group_by(cluster) %>%
+  summarise(n = n()/T) %>%
+  arrange(desc(n)) %>%
+  ggplot(aes(x=1:36, y=n), data=.) + 
+  geom_bar(stat="identity") +
+  geom_hline(yintercept=1/36, linetype="dotted") + 
+  xlab("Scenario") + 
+  ylab("Prob")  + 
+  theme_minimal(base_size=10) + 
+  theme(text=element_text(family=font)  )
+
+ggsave("../../TexDocuments/Figures/histOfClusterProbs.pdf", 
+       g, width=3.25, height=3.25, units="in")
+
+
+d1 = mkt_small %>% group_by(cluster) %>%
+  summarise_each(funs(mean), -Date)
+d2 = mkt_small %>% group_by(cluster) %>% summarise(Prob=n()/T)
+d1 = join(d1, d2)
+
+write.csv(d1, file="Data/ClusterScenarios.csv")
 
