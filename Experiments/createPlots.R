@@ -9,7 +9,7 @@ library(reshape2)
 
 #VG Kill this before submitting?
 setwd("/Users/vishalgupta/Documents/Research/BayesDRO/AmbiguitySets/Experiments/Results/")
-#font = "CM Roman"
+font = "CM Roman"
 font = "Times New Roman"
 
 #########
@@ -23,7 +23,7 @@ g = ggplot(aes(x=N, y=Ratio, color=Type),
   geom_point(aes(shape=Type), size=2) +
   scale_x_log10(breaks=c(10, 100, 1000, 10000)) +
   scale_linetype_discrete(guide=FALSE) + 
-  theme_bw(base_size=12) + 
+  theme_minimal(base_size=12) + 
   theme(legend.title=element_blank(), 
         legend.position=c(.7, .8), 
         text=element_text(family=font), 
@@ -48,19 +48,20 @@ ggsave("../../../TexDocuments/Figures/convInN.pdf",
 # The epsilon plot
 ######
 setwd("/Users/vishalgupta/Documents/Research/BayesDRO/AmbiguitySets/Experiments/Results/")
-dat_ = read.csv(file="new_eps_plot2.csv", header=TRUE)
+dat_ = read.csv(file="new_eps_plot.csv", header=TRUE)
 dat = melt(dat_, id.vars=c("eps"), variable.name="Type")
 
 g <- ggplot(aes(x=eps, y=value, color=Type), 
            data=dat) + 
   geom_line(aes(linetype=Type)) + 
-  geom_point(aes(shape=Type), size=3) +
+  geom_point(aes(shape=Type), size=2) +
   xlab(expression(epsilon)) + ylab("") +
   scale_linetype_discrete(guide=FALSE) + 
-  theme_bw(base_size=12) + 
+  theme_minimal(base_size=12) + 
   theme(legend.title=element_blank(), 
-        legend.position=c(.3, .7), 
-        text=element_text(family=font))
+        legend.position=c(.5, .95), 
+        text=element_text(family=font), 
+        legend.direction="horizontal")
 
 my.labs <- c(expression(KL), expression(chi^2), 
              expression(phi-"Div, d=5"), 
@@ -71,7 +72,8 @@ g<-
   g + scale_color_discrete(breaks=my.breaks, 
                              labels=my.labs) + 
   scale_shape_discrete(breaks=my.breaks, 
-                       labels=my.labs)
+                       labels=my.labs) + 
+  guides(col=guide_legend(nrow=2))
 
 ggsave("../../../TexDocuments/Figures/eps_plot.pdf", 
        g, width=3.25, height=3.25, units="in")
@@ -92,10 +94,10 @@ g<- ggplot(aes(x=Cov_eps, y=Real_eps,
   geom_point(size=3) + 
   geom_line() 
 
-g<- g + theme_bw(base_size=12) + 
+g<- g + theme_minimal(base_size=12) + 
   xlab(expression(paste("Desired ",epsilon))) + 
   ylab(expression(paste("Achieved ", epsilon))) + 
-  theme(legend.position="top", 
+  theme(legend.position=c(.15, .8), 
         legend.title=element_blank(), 
         text=element_text(family=font))
 

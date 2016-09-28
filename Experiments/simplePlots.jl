@@ -72,7 +72,7 @@ end
 
 #Creates Fig 1b
 function plot_in_eps(path)
-	eps_grid = linspace(.01, .4, 20)
+	eps_grid = linspace(.01, .15, 20)
 	kl_vals = map(Dir.kl_const, eps_grid)
 	mom_vals = map(Dir.chisq_const, eps_grid)
 
@@ -87,7 +87,7 @@ end
 
 # Fig 3b
 function comp_eps_kl(path)
-	eps_grid = linspace(.001, .5, 30)
+	eps_grid = linspace(.001, .15, 30)
 	fp = open(path, "w")
 	writecsv(fp, ["d" "Cov_eps" "Real_eps"])
 	for d in [3, 5, 10]
