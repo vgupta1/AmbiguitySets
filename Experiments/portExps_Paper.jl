@@ -349,43 +349,44 @@ function test_incr_d(; N=300, numRuns=1000, budget=3, eps_=.1, seed=nothing)
 	close(f)
 end
 
+##VG Seems like we can drop
 #Generate data and a wrong prior and then assess
-function test_wrongPrior(d, N, numRuns; budget=3, seed=8675309)
-	f = open("Results/randWrongPrior_$(N)_$(d)_$(seed).csv", "w")
-	writecsv(f, ["Run" "Dist" "Scale" "Method" "inReturn" "outReturn" "CVaR"])
-	seed != nothing && srand(seed)
-	eps_ = .1
-	scale_grid = collect(.1:.1:3.)
+# function test_wrongPrior(d, N, numRuns; budget=3, seed=8675309)
+# 	f = open("Results/randWrongPrior_$(N)_$(d)_$(seed).csv", "w")
+# 	writecsv(f, ["Run" "Dist" "Scale" "Method" "inReturn" "outReturn" "CVaR"])
+# 	seed != nothing && srand(seed)
+# 	eps_ = .1
+# 	scale_grid = collect(.1:.1:3.)
 
-	supp = getMktSupp(d)
-	cnts = buildSynthMkt(N, supp)
-	pstar = ones(d)/d
+# 	supp = getMktSupp(d)
+# 	cnts = buildSynthMkt(N, supp)
+# 	pstar = ones(d)/d
 
-	for scale in scale_grid
-		for iSim = 1:numRuns
-			pseudo_cnts = rand(d)
-			pseudo_cnts /= sum(pseudo_cnts)
-			#calculate the distance
-			dist = norm(pseudo_cnts - pstar)
+# 	for scale in scale_grid
+# 		for iSim = 1:numRuns
+# 			pseudo_cnts = rand(d)
+# 			pseudo_cnts /= sum(pseudo_cnts)
+# 			#calculate the distance
+# 			dist = norm(pseudo_cnts - pstar)
 
-			#scale up
-			pseudo_cnts *= N * scale
+# 			#scale up
+# 			pseudo_cnts *= N * scale
 
-			zchisq, xchisq = chisq_port(eps_, budget, supp, cnts+ pseudo_cnts, false)
-			zkl, xkl = kl_port(eps_, budget, supp, cnts + pseudo_cnts, false)
+# 			zchisq, xchisq = chisq_port(eps_, budget, supp, cnts+ pseudo_cnts, false)
+# 			zkl, xkl = kl_port(eps_, budget, supp, cnts + pseudo_cnts, false)
 
-			outchisq, cvarchisq = out_perf(xchisq, eps_, supp)
-			writecsv(f, [iSim dist scale "Chisq" zchisq outchisq cvarchisq])
+# 			outchisq, cvarchisq = out_perf(xchisq, eps_, supp)
+# 			writecsv(f, [iSim dist scale "Chisq" zchisq outchisq cvarchisq])
 
-			outkl, cvarkl = out_perf(xkl, eps_, supp)
-			writecsv(f, [iSim dist scale "KL" zkl outkl cvarkl])
-		end
-	end
-	close(f)
-end
+# 			outkl, cvarkl = out_perf(xkl, eps_, supp)
+# 			writecsv(f, [iSim dist scale "KL" zkl outkl cvarkl])
+# 		end
+# 	end
+# 	close(f)
+# end
 
 
-#Generate data and a wrong prior and then assess
+#An increasingly incorrect prior
 function test_wrongPriorScale(numRuns; budget=3, d=72, N=300, seed=nothing)
 	f = open("Results/randWrongPriorScale_$(N)_$(d).csv", "w")
 	writecsv(f, ["Run" "Scale" "Method" "inReturn" "outReturn" "CVaR"])
@@ -408,64 +409,107 @@ function test_wrongPriorScale(numRuns; budget=3, d=72, N=300, seed=nothing)
 	close(f)
 end
 
-function test_wrongPriorConv(d, numRuns; budget=3, seed=nothing, scale=20)
-	f = open("Results/randWrongPrior2_$(scale).csv", "w")
-	writecsv(f, ["Run" "N" "Method" "inReturn" "outReturn" "CVaR"])
+function test_wrongPrior_IncrN(;d=72, numRuns=1000, budget=3, seed=8675309, 
+								eps_=.1, tau0=175, path="Results/wrongPrior_IncrN")
+	f = open("$(path)_$(d)_$(budget).csv", "w")
+	writecsv(f, ["Run" "N" "Method" "inReturn" "outReturn" "CVaR" "X_norm"])
 	seed != nothing && srand(seed)
-	eps_ = .1
-
 	supp = getMktSupp(d)
+	prior = ones(d)
+	prior[1] = tau0
 
-	prior1 = collect(1:d)/d 
-	prior1 /= sum(prior1)
-	prior1 *= scale
-
-	prior2 = exp((1:d)/d)
-	prior2 /= sum(prior2) 
-	prior2 *= scale
-
-	prior3 = exp(5(1:d)/d)
-	prior3 /= sum(prior3) 
-	prior3 *= scale
-
-	for N = 10:50:500
+	for N in 100:100:1000
 		for iSim = 1:numRuns
 			cnts = buildSynthMkt(N, supp)
 
-			zkl1, xkl1 = kl_port(eps_, budget, supp, cnts + prior1, false)
-			zkl2, xkl2 = kl_port(eps_, budget, supp, cnts + prior2, false)
-			zkl3, xkl3 = kl_port(eps_, budget, supp, cnts + prior3, false)
-
-			outkl1, cvarkl1 = out_perf(xkl1, eps_, supp)
-			writecsv(f, [iSim N "prior1" zkl1 outkl1 cvarkl1])
-
-			outkl2, cvarkl2 = out_perf(xkl2, eps_, supp)
-			writecsv(f, [iSim N "prior2" zkl2 outkl2 cvarkl2])
-
-			outkl3, cvarkl3 = out_perf(xkl3, eps_, supp)
-			writecsv(f, [iSim N "prior3" zkl3 outkl3 cvarkl3])
+			zkl, xkl = kl_port(eps_, budget, supp, cnts + prior, false)
+			outkl, cvarkl = out_perf(xkl, eps_, supp)
+			writecsv(f, [iSim N "KL" zkl outkl cvarkl norm(xkl)])
 		end
 	end
 	close(f)
 end
 
+##VG Seems like we can drop
+# function test_wrongPriorConv(d, numRuns; budget=3, seed=nothing, scale=20)
+# 	f = open("Results/randWrongPrior2_$(scale).csv", "w")
+# 	writecsv(f, ["Run" "N" "Method" "inReturn" "outReturn" "CVaR"])
+# 	seed != nothing && srand(seed)
+# 	eps_ = .1
+
+# 	supp = getMktSupp(d)
+
+# 	prior1 = collect(1:d)/d 
+# 	prior1 /= sum(prior1)
+# 	prior1 *= scale
+
+# 	prior2 = exp((1:d)/d)
+# 	prior2 /= sum(prior2) 
+# 	prior2 *= scale
+
+# 	prior3 = exp(5(1:d)/d)
+# 	prior3 /= sum(prior3) 
+# 	prior3 *= scale
+
+# 	for N = 10:50:500
+# 		for iSim = 1:numRuns
+# 			cnts = buildSynthMkt(N, supp)
+
+# 			zkl1, xkl1 = kl_port(eps_, budget, supp, cnts + prior1, false)
+# 			zkl2, xkl2 = kl_port(eps_, budget, supp, cnts + prior2, false)
+# 			zkl3, xkl3 = kl_port(eps_, budget, supp, cnts + prior3, false)
+
+# 			outkl1, cvarkl1 = out_perf(xkl1, eps_, supp)
+# 			writecsv(f, [iSim N "prior1" zkl1 outkl1 cvarkl1])
+
+# 			outkl2, cvarkl2 = out_perf(xkl2, eps_, supp)
+# 			writecsv(f, [iSim N "prior2" zkl2 outkl2 cvarkl2])
+
+# 			outkl3, cvarkl3 = out_perf(xkl3, eps_, supp)
+# 			writecsv(f, [iSim N "prior3" zkl3 outkl3 cvarkl3])
+# 		end
+# 	end
+# 	close(f)
+# end
+
+#Distance metrics to consider for assessing prior misspec
+# Exp ChiSq distance and Exp Modified Chi Sq distance 
+# MSE of the performance of full-info portfolio
+# Suboptimality of the full-info portfolio relative to optimal portfolio for that prior
+
+#expected mse between prior realization and pstar
+mse(d_prior, pstar) = norm(mean(d_prior) - pstar)^2 + sum(var(d_prior))
+
+#expected mse of performance of xstar under prior and pstar
+function port_mse(xstar, supp, taus, pstar)
+	mu = Dir.calc_phat(taus)[1]
+	Sigma = Dir.sigma(taus)
+	xstar' * supp' * (Sigma + (mu-pstar)*(mu-pstar)') * supp * xstar	
+end
+
+#upperbound on the exp 2 norm of diff between mean perf of assests
+function asset_mse(supp, taus, pstar)
+	mu = Dir.calc_phat(taus)[1]
+	Sigma = Dir.sigma(taus)
+	sqrt(dot(vec((Sigma + (mu-pstar)*(mu-pstar)')), vec(supp*supp')))
+end
+
 #randomly generate priors and then assess their performance
-function randomWrongPriors(d; numSims=100, numPriors=100, budget=3, eps_ = .1, 
+function randomWrongPriors(; d=72, numSims=300, numPriors=100, budget=3, eps_ = .1, 
 							seed=8675309, path = "Results/random_wrong_priors",
 							strengths = [.1, .25, .5, .75, 1.], 
-							N_grid = [100, 200, 300])
+							N_grid = [300])
 	srand(seed)
 	f = open("$(path)_$(d)_$(budget).csv", "w")
-	writecsv(f, ["iPrior" "iSim" "N" "relProb" "MSE" "Method" "outReturn" "outCVaR"])
+	writecsv(f, ["iPrior" "iSim" "N" "strength" "MSE" "portMSE" "AssetMSE" "Method" "outReturn" "outCVaR"])
 	const pstar = ones(d)/d
 	supp = getMktSupp(d)
 
-	#Generate priors uniformly on the simplex with strength given by N
-	prior_generator = Dirichlet(ones(d))
+	#compute the full-information portfolio for comparisons
+	zstar, xstar = saa_port(eps_, budget, supp, pstar)
 
-	#Compute the full information optimum for comparison
-	ret_full, x_full = saa_port(eps_, budget, supp, pstar)
-	println("Full Info Optimal: \t", ret_full, "\t", x_full')
+	#We will generate priors uniformly on the simplex with strength given by a fraction of N
+	prior_generator = Dirichlet(ones(d))
 
 	for (N, strength) in product(N_grid, strengths)
 		tau0 = int(N * strength)
@@ -473,12 +517,11 @@ function randomWrongPriors(d; numSims=100, numPriors=100, budget=3, eps_ = .1,
 			taus = rand(prior_generator) * tau0
 			prior = Dirichlet(taus)
 			mode = (taus - 1)/(sum(taus) - d)
-			# println("Min/Max:\t", minimum(taus), "\t", maximum(taus))
-			# println("Mode:\t", minimum(mode), "\t", maximum(mode))
+
 			#calc the distances
-			mu = mean(prior)
-			relProb = pdf(prior, pstar) / pdf(prior, mu)
-			MSE = norm(mu - pstar)^2 + sum(var(prior))
+			MSE = mse(prior, pstar)
+			PMSE = port_mse(xstar, supp, taus, pstar)
+			AMSE = asset_mse(supp, taus, pstar)
 
 			t = tic()
 			for iSim = 1:numSims
@@ -488,11 +531,11 @@ function randomWrongPriors(d; numSims=100, numPriors=100, budget=3, eps_ = .1,
 				#Form portfolio with prior and record
 				zchisq, xchisq = chisq_port(eps_, budget, supp, cnts + taus, false)			
 				ret_chisq, cvar_chisq = out_perf(xchisq, eps_, supp)
-				writecsv(f, [iPrior iSim N relProb MSE "ChiSq" ret_chisq cvar_chisq])
+				writecsv(f, [iPrior iSim N strength MSE PMSE AMSE "ChiSq" ret_chisq cvar_chisq])
 	
 				zkl, xkl = kl_port(eps_, budget, supp, cnts + taus, false)			
 				ret_kl, cvar_kl = out_perf(xkl, eps_, supp)
-				writecsv(f, [iPrior iSim N relProb MSE "KL" ret_kl cvar_kl])
+				writecsv(f, [iPrior iSim N strength MSE  "KL" ret_kl cvar_kl])
 			end
 			toc()
 		end #end priors loop
