@@ -497,7 +497,7 @@ end
 #randomly generate priors and then assess their performance
 function randomWrongPriors(; d=72, numSims=300, numPriors=100, budget=3, eps_ = .1, 
 							seed=8675309, path = "Results/random_wrong_priors",
-							strengths = [.1, .25, .5, .75, 1.], 
+							strengths = [.1, .25, .5, .75, 1., 1.25, 1.5], 
 							N_grid = [300])
 	srand(seed)
 	f = open("$(path)_$(d)_$(budget).csv", "w")
@@ -512,7 +512,7 @@ function randomWrongPriors(; d=72, numSims=300, numPriors=100, budget=3, eps_ = 
 	prior_generator = Dirichlet(ones(d))
 
 	for (N, strength) in product(N_grid, strengths)
-		tau0 = int(N * strength)
+		tau0 = int(N * strength) + d
 		for iPrior = 1:numPriors
 			taus = rand(prior_generator) * tau0
 			prior = Dirichlet(taus)
@@ -535,7 +535,7 @@ function randomWrongPriors(; d=72, numSims=300, numPriors=100, budget=3, eps_ = 
 	
 				zkl, xkl = kl_port(eps_, budget, supp, cnts + taus, false)			
 				ret_kl, cvar_kl = out_perf(xkl, eps_, supp)
-				writecsv(f, [iPrior iSim N strength MSE  "KL" ret_kl cvar_kl])
+				writecsv(f, [iPrior iSim N strength  MSE PMSE AMSE  "KL" ret_kl cvar_kl])
 			end
 			toc()
 		end #end priors loop
