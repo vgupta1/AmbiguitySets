@@ -4,6 +4,7 @@ In the spirit of reproducible research, this repository contains all code necess
 
 > [Near-Optimal Ambiguity Sets for Distributionally Robust Optimization](http://www.optimization-online.org/DB_HTML/2015/07/4983.html) by V. Gupta, Management Science (to appear).
 
+Implementations leverage the JuMPeR interface (https://github.com/IainNZ/JuMPeR.jl), and hence has an external dependency.  Since this code is necessarily static, this dependency might create some minor inconsitencies if interfaces change in the future.
 
 ## Citation
 If you find this package useful, please consider citing the above paper as:
