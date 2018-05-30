@@ -3,7 +3,7 @@ library(plyr)
 library(dplyr)
 library(extrafont) #for latex fonts
 library(reshape2)
-font = "Times New Roman"
+font = "Times"
 
 setwd("~/Documents/Research/BayesDRO/AmbiguitySets/Experiments/")
 
@@ -32,7 +32,7 @@ g <- ggplot(aes(x=Scale, y=outPerf),
         legend.position="top", 
         text=element_text(family=font)) + 
   ylab("Return (%)") + 
-  xlab(expression(tau[0]))
+  xlab(expression(hat(tau)[0]))
 
 ggsave("../../TexDocuments/Figures/scalePriorReturn.pdf", 
        g, width=3.25, height=3.25, units="in")
@@ -47,7 +47,7 @@ g<- ggplot(aes(x=Scale, y=outCVaR), data=dat.sum) +
         legend.position="top") + 
   ylab("CVaR (%)") +
   geom_hline(yintercept=3, linetype="dashed") + 
-  xlab(expression(tau[0]))
+  xlab(expression(hat(tau)[0]))
 
 ggsave("../../TexDocuments/Figures/scalePriorRisk.pdf", 
        g, width=3.25, height=3.25, units="in")
@@ -89,19 +89,50 @@ ggsave("../../TexDocuments/Figures/scalePriorRiskIncreasingN.pdf",
 ####
 # Randomly Generated Priors and Performance
 ####
-dat = read.csv("Results/random_wrong_priors_72_3.csv", header=TRUE)
+dat = read.csv("Results/random_wrong_priors2_72_3.csv")
+dat = read.csv("Results/random_wrong_priors_1000_72_3.csv")
 
 head(dat)
 
-filter(dat, Method == "ChiSq", N == 300) %>%
-  ggplot(aes(x=sqrt(MSE), y=outReturn, group=factor(N), color=factor(N)), data=.) + 
+##test if you can collapse things by prior
+t <- dat %>% group_by(iPrior, N, strength, Method) %>%
+  summarize(Return = mean(outReturn), 
+            stdErrReturn = sd(outReturn)/ sqrt(n()), 
+            CVaR= mean(outCVaR), 
+            stdErrCVar = sd(outCVaR)/ sqrt(n()),
+            Num = n())
+
+#std errors for return and CvAr are smaller than digits shown?
+max(t$stdErrReturn)
+max(t$stdErrCVar)
+
+
+### summarize data
+d1 <- dat %>% group_by(iPrior, Method) %>%
+  summarize(Return = mean(outReturn),
+            CVaR= mean(outCVaR), 
+            N = n())
+d2 <- dat %>% select(iPrior, Method, MSE, portMSE, AssetMSE)
+d <- join(d1, d2, type="left")
+
+
+d %>%
+  ggplot(aes(x=AssetMSE, y=CVaR, group=1), data=.) + 
   geom_smooth() + geom_point()
 
-
-dat.sum <- dat %>% group_by(iPrior, N, relProb, MSE, Method) %>%
-  summarize(Return = mean(outReturn), CVaR =mean(outCVaR))
-
-filter(dat.sum, Method == "ChiSq", N == 300) %>%
-  ggplot(aes(x=MSE, y=Return, group=factor(N), color=factor(N)), data=.) + 
-  geom_smooth() + geom_point()
+## Plots look like garbage
+## Just make a table.
+dat.sum<- dat %>% group_by(Method, strength) %>%
+  summarize(avgReturn = mean(outReturn), 
+            lowReturn = quantile(outReturn, .1), 
+            highReturn = quantile(outReturn, .9),
+            minReturn = min(outReturn), 
+            maxReturn = max(outReturn), 
+            avgCVaR = mean(outCVaR), 
+            lowCVaR = quantile(outCVaR, .1),
+            highCVaR = quantile(outCVaR, .9),            
+            minCVaR = min(outCVaR), 
+            maxCVaR = max(outCVaR))  %>%
+            mutate(strength = 100*strength)
+dat.sum %>% select(-minReturn, -maxReturn, -minCVaR, -maxCVaR)
 

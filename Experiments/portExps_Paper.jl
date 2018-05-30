@@ -71,12 +71,12 @@ end
 function naive_port(eps_, budget, supp, counts)
 	d, numAssets = size(supp)
 	phat, alpha0 = Dir.calc_phat(counts)
-	xs = ones(numAssets)
+	xs = ones(numAssets)/numAssets
 	if budget > 0 
 		cvar = Dir.cvar_sort(supp * xs, phat, eps_)
-		##VG Sanity check to be removed
-		@assert cvar >= budget 
-		xs /= cvar/budget  #ensures new cvar close to budget
+		if cvar >= budget 
+			xs /= cvar/budget 
+		end
 	end
 	phat' * supp * xs, xs
 end
@@ -98,9 +98,9 @@ function min_var_port(eps_, budget, supp, counts)
 	#rescale to get CVaR close to budget
 	if budget > 0
 		cvar = Dir.cvar_sort(supp * xs, phat, eps_)
-		##VG Sanity check to be removed
-		@assert cvar >= budget 
-		xs /= cvar/budget  #ensures new cvar close to budget
+		if cvar >= budget 
+			xs /= cvar/budget  #ensures new cvar close to budget
+		end
 	end
 	phat' * supp * xs, xs
 end
@@ -544,10 +544,9 @@ function randomWrongPriors(; d=72, numSims=300, numPriors=100, budget=3, eps_ = 
 	close(f)
 end
 
-function fullSim(d; budget=4, seed=nothing)
+function fullSim(d; budget=4)
 	f = open("Results/real_sim_$(d)_$(budget).csv", "w")
 	writecsv(f, ["ix" "Method" "inReturn" "outReturn"])
-	seed != nothing && srand(seed)
 	T = 200 + d + 1
 	eps_ = .1
 	mkt = getMktSupp(T)
@@ -570,8 +569,10 @@ function fullSim(d; budget=4, seed=nothing)
 		zsaa, xsaa = saa_port(eps_, budget, supp, cnts)
 		outsaa =dot(vec(mkt[ix+1, :]), xsaa)
 
+		tic()
 		zchisq, xchisq = chisq_port(eps_, budget, supp, cnts, false)
 		outchisq = dot(vec(mkt[ix+1, :]), xchisq)
+		toc()
 
 		zkl, xkl = kl_port(eps_, budget, supp, cnts, false)
 		outkl = dot(vec(mkt[ix+1, :]), xkl)

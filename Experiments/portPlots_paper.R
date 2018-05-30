@@ -202,69 +202,97 @@ ggsave("../../TexDocuments/Figures/portConvInDRisk_700_full.pdf",
 #############
 # the full sim
 #####
-myfun <- function(t){-quantile(t, .05)}
+myfun <- function(t){-quantile(t, .1)}
+
+cvar <- function(t){
+    var = quantile(t, .1)
+    -mean(t[ t <= var ])}
 
 dat = read.csv("Results/real_sim_36_6.csv")
-dat %>% filter(!Method %in% c("NaiveUnsc", "MinVarUnsc")) %>%
-  group_by(Method) %>%
-  select(-ix, -inReturn) %>%
-  summarise_each(funs(mean, sd, myfun)) %>%
-  mutate(ratio = mean/myfun) %>%
-  arrange(ratio)
 
-## dump for julia to do the cvar calc
-dcast(dat, ix ~Method, value.var="outReturn") %>% 
-  write.csv("Results/temp_out.csv")
-
-dat %>% filter(Method %in% c("Chisq", "KL", "Naive", "MinVar")) %>%
-ggplot(aes(x=outReturn, group=Method, color=Method, linetype=Method)) + 
-  geom_density() + 
-  ylab("") + 
-  xlab("Return (%)") +
-  theme_minimal(base_size=10) + 
-  theme(legend.position=c(.3, .8), 
-        legend.title=element_blank())
-
-dat %>% filter(Method %in% c("Chisq", "KL", "SAA")) %>%
-ggplot(aes(x=inReturn, y=outReturn, color=Method)) + 
-  geom_point() + 
-  geom_abline()
-
-dat %>% mutate(comp = inReturn > outReturn) %>%
-  group_by(Method) %>%
-  summarise(mean(comp))
-
-dat %>% mutate(diff = outReturn - inReturn) %>%
-  filter(Method %in% c("Chisq", "KL", "SAA")) %>%
-  ggplot(aes(x=diff, group=Method, fill=Method)) + 
-  geom_histogram() + 
-  facet_grid(Method~.) + 
-  theme_minimal(base_size=10) + 
-  theme(legend.position="none")
-
-### plot smoothed returns just to see what's happening
-#convert to actual date objects
+#Add actual date objects for plotting
+dat$dt = mkt$Date[dat$ix-36 + 1062-200]
 dat <- dat %>% 
-  mutate(Date = mkt$Date[ix-36 + 1062-200], 
-         Date2 = as.Date(paste(Date, "01", sep=""), "%Y%m%d"))
-  
-g<- dat %>% group_by(Method) %>%
-  filter(!Method %in% c("NaiveUnsc", "MinVarUnsc")) %>%
-  mutate(cumReturn = cumprod(1 + .01 * outReturn)) %>%
-  ggplot(aes(x=Date2, y=cumReturn, 
-           color=Method, group=Method)) + 
-  geom_line(aes(linetype=Method)) + theme_minimal(base_size=10) + 
-  theme(legend.position = c(.2, .8), 
-        text=element_text(family=font), 
-        legend.title=element_blank()) +
-  ylab("Wealth") + xlab("")
+  mutate(dt2 = as.Date(paste(dt, "01", sep=""), "%Y%m%d"))
 
-my.labs <- c(expression(chi^2), expression(KL),  expression(SAA))
-my.breaks <- c("Chisq", "KL", "SAA")
+### Comptue the rolling CVaR by method
+dat <- dat %>% group_by(Method) %>%
+      mutate( CVaR72 = rollapply(outReturn, width=72, cvar, 
+                             fill=NA, align="right"))
 
-g <- g + scale_color_discrete(breaks=my.breaks, 
+## First compute the summary table for the document:
+dat %>% group_by(Method) %>% #filter(!Method %in% c("MinVarUnsc", "NaiveUnsc")) %>%
+  summarise(AvgReturn = mean(outReturn), 
+            StdDev = sd(outReturn), 
+            VaR = -quantile(outReturn, .1), 
+            CVaR = cvar(outReturn),
+            RetFeas = mean(outReturn > inReturn), 
+            Ratio = AvgReturn/CVaR) %>%
+  arrange(Ratio)
+
+wealthPlot <- function(d){
+  g<- d %>% group_by(Method) %>%
+    filter(!Method %in% c("NaiveUnsc", "MinVarUnsc")) %>%
+    mutate(cumReturn = cumprod(1 + .01 * outReturn)) %>%
+    ggplot(aes(x=dt2, y=cumReturn, 
+               color=Method, group=Method)) + 
+    geom_line(aes(linetype=Method)) + theme_minimal(base_size=10) + 
+    theme(legend.position = c(.2, .8), 
+          text=element_text(family=font), 
+          legend.title=element_blank(),
+          legend.direction="horizontal") +
+    ylab("Wealth") + xlab("")  
+  g <- g + scale_color_discrete(breaks=my.breaks, 
                                 labels=my.labs) + 
-  scale_linetype_discrete(breaks = my.breaks, labels=my.labs)
+    scale_linetype_discrete(breaks = my.breaks, labels=my.labs) + 
+    guides(col=guide_legend(ncol=2))
+}
 
-ggsave("../../TexDocuments/Figures/returnsHistorical.pdf", 
-       g, width=6, height=3.25, units="in")
+# Plot the wealth process
+#SAVE a big one for teh appendix with everybody
+#Since it's color, you can just natural labeling
+g <- wealthPlot(dat)
+ggsave("../../TexDocuments/Figures/returnsHistorical_Full.pdf", 
+       g, width=6.5, height=4, units="in")
+
+
+#Now do one without MinVar, without KL, and without KLC, 
+g <- dat %>% filter(!Method %in% c("KL", "MinVar", "KLCov")) %>%
+  wealthPlot()
+#can't assume it's color, so add label in PPT
+g <- g +theme(legend.position="none")
+ggsave("../../TexDocuments/Figures/returnsHistorical_nolabels.pdf", 
+       g, width=3.25, height=3.25, units="in")
+
+##Plot rolling CVAR
+cvarPlot <- function(dt){
+  dt %>% filter(!is.na(CVaR72), 
+             !Method %in% c("NaiveUnsc", "MinVarUnsc")) %>%
+    ggplot(aes(x=dt2, y=CVaR72, group=Method, 
+               color=Method, linetype=Method), 
+           data=.) + 
+    scale_linetype_discrete(breaks = my.breaks, labels=my.labs) +
+    scale_color_discrete(breaks = my.breaks, labels=my.labs) +
+    geom_line() +
+    geom_hline(yintercept=6, linetype="dotted") + 
+    xlab("") + ylab("Rolling CVaR") + 
+    theme_minimal(base_size=10) + 
+    theme(legend.title=element_blank(), 
+          text=element_text(family=font), 
+          legend.direction="horizontal", 
+          legend.position =c(.5, 1))
+}
+g <- cvarPlot(dat)
+
+#SAVE a big one for teh appendix with everybody
+ggsave("../../TexDocuments/Figures/rollingCVaR_Full.pdf", 
+       g, width=6.5, height=4, units="in")
+
+
+##Make a smaller one.  No labels.  ADded in ppt. 
+g <- dat %>% filter(!Method %in% c("KL", "MinVar", "KLCov")) %>%
+      cvarPlot()
+g <- g +theme(legend.position="none")
+ggsave("../../TexDocuments/Figures/CVaRHistorical_nolabels.pdf", 
+       g, width=3.25, height=3.25, units="in")
+

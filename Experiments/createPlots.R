@@ -82,21 +82,21 @@ ggsave("../../../TexDocuments/Figures/eps_plot.pdf",
 
 ##########
 # Plots comparing epsilons
-dat = read.csv("comp_eps_plot.csv", header=TRUE)
+dat = read.csv("comp_eps_plot2.csv", header=TRUE)
 dat$d = factor(dat$d)
 
 #d = 3 is the same as the Good KL
 dat$d = revalue(dat$d, c("3"="KL"))
 
-g<- ggplot(aes(x=Cov_eps, y=Real_eps, 
+g<- ggplot(aes(x=1-Cov_eps, y=1-Real_eps, 
            group=d, color=d, shape=d), 
        data=dat) + 
   geom_point(size=3) + 
   geom_line() 
 
 g<- g + theme_minimal(base_size=12) + 
-  xlab(expression(paste("Desired ",epsilon))) + 
-  ylab(expression(paste("Achieved ", epsilon))) + 
+  xlab(expression(paste("Desired 1-",epsilon))) + 
+  ylab(expression(paste("Achieved 1-", epsilon))) + 
   theme(legend.position=c(.15, .8), 
         legend.title=element_blank(), 
         text=element_text(family=font))
@@ -114,6 +114,7 @@ g<-
                        labels=my.labs) 
   
 g<- g + geom_abline(linetype="dotted")
+g <- g + theme(legend.position=c(.35, .8))
 
 ggsave("../../../TexDocuments/Figures/comp_eps_kl.pdf", 
        g, width=3.25, height=3.25, units="in")

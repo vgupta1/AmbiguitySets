@@ -91,7 +91,7 @@ function comp_eps_kl(path)
 	fp = open(path, "w")
 	writecsv(fp, ["d" "Cov_eps" "Real_eps"])
 	for d in [3, 5, 10]
-		kl_cov_vals = map(eps_-> sqrt(quantile(Distributions.Chisq(d-1), 1-eps_)/2), 
+		kl_cov_vals = map(eps_-> sqrt(quantile(Distributions.Chisq(d-1), 1-eps_)), 
 							eps_grid)
 		real_eps_vals = 1- cdf(Distributions.Normal(), kl_cov_vals)
 		writecsv(fp, [d*ones(length(eps_grid)) eps_grid real_eps_vals])
